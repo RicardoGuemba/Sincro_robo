@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#081018">
+  <title>SINCRO_ROBO</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </div>
+      <div>
+        <h1>SINCRO<span>_ROBO</span></h1>
+        <p>Sincronismo visão ↔ robô</p>
+      </div>
+    </div>
+    <div class="topbar-center" id="clock">--:--:--</div>
+    <div class="status-strip" aria-label="Estado dos serviços">
+      <div class="service-status" id="status-camera"><i></i><span>Câmera</span><b>...</b></div>
+      <div class="service-status" id="status-model"><i></i><span>RF-DETR</span><b>...</b></div>
+      <div class="service-status" id="status-plc"><i></i><span>CLP</span><b>...</b></div>
+    </div>
+  </header>
+
+  <div class="mode-banner" id="mode-banner">
+    <span class="pulse-dot"></span>
+    <strong>Ambiente local</strong>
+    <span id="mode-description">Carregando configuração…</span>
+    <span class="version" id="version-label">v--</span>
+  </div>
+
+  <main class="workspace">
+    <section class="session-bar panel">
+      <div class="session-identity">
+        <span class="eyebrow">Sessão ativa</span>
+        <div class="session-title-row">
+          <h2 id="session-name">Nenhuma sessão selecionada</h2>
+          <span class="session-state" id="session-state">AGUARDANDO</span>
+        </div>
+      </div>
+      <div class="session-actions">
+        <select id="session-select" aria-label="Selecionar sessão">
+          <option value="">Selecionar sessão…</option>
+        </select>
+        <button class="button button-secondary" id="activate-session">Abrir</button>
+        <button class="button button-primary" id="new-session">+ Nova sessão</button>
+      </div>
+    </section>
+
+    <section class="main-grid">
+      <article class="panel vision-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">Aquisição em tempo real</span>
+            <h2>Visão do molde</h2>
+          </div>
+          <div class="vision-state waiting" id="vision-state"><i></i> Aguardando visão</div>
+        </div>
+        <div class="camera-stage">
+          <img id="camera-frame" alt="Imagem da câmera com máscara, centroide e eixo principal">
+          <div class="camera-empty" id="camera-empty">
+            <div class="scan-icon"><span></span></div>
+            <strong>Aguardando primeiro frame</strong>
+            <small>A imagem aparecerá quando o serviço de câmera estiver pronto.</small>
+          </div>
+          <div class="frame-corners" aria-hidden="true"></div>
+          <div class="frame-meta">
+            <span id="frame-resolution">— × — px</span>
+            <span>θ horário · módulo 180°</span>
+          </div>
+        </div>
+        <div class="vision-readings">
+          <div class="reading major"><span>Xv</span><strong id="vision-x">—</strong><small>px</small></div>
+          <div class="reading major"><span>Yv</span><strong id="vision-y">—</strong><small>px</small></div>
+          <div class="reading angle"><span>θv</span><strong id="vision-angle">—</strong><small>graus</small></div>
+          <div class="quality-block">
+            <div><span>Confiança</span><strong id="vision-confidence">—</strong></div>
+            <div class="quality-track"><i id="confidence-bar"></i></div>
+          </div>
+          <div class="quality-block">
+            <div><span>Qualidade do eixo</span><strong id="axis-quality">—</strong></div>
+            <div class="quality-track"><i id="axis-bar"></i></div>
+          </div>
+        </div>
+        <div class="jitter-row">
+          <span>Jitter da janela</span>
+          <b>σX <em id="sigma-x">—</em> px</b>
+          <b>σY <em id="sigma-y">—</em> px</b>
+          <b>σθ <em id="sigma-angle">—</em>°</b>
+        </div>
+      </article>
+
+      <aside class="right-stack">
+        <article class="panel robot-panel">
+          <div class="panel-heading compact">
+            <div>
+              <span class="eyebrow">Leitura CIP · somente leitura</span>
+              <h2>Pose atual do robô</h2>
+            </div>
+            <span class="freshness" id="pose-freshness">—</span>
+          </div>
+          <div class="pose-grid">
+            <div><span>X</span><strong id="robot-x">—</strong><small>mm</small></div>
+            <div><span>Y</span><strong id="robot-y">—</strong><small>mm</small></div>
+            <div><span>Z</span><strong id="robot-z">—</strong><small>mm</small></div>
+            <div class="diagnostic"><span>Rx</span><strong id="robot-rx">—</strong><small>°</small></div>
+            <div class="diagnostic"><span>Ry</span><strong id="robot-ry">—</strong><small>°</small></div>
+            <div><span>Rz</span><strong id="robot-rz">—</strong><small>°</small></div>
+          </div>
+          <div class="read-only-note">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3m-9 0h8a2 2 0 0 1 2 2v7H6v-7a2 2 0 0 1 2-2Z"/></svg>
+            O app nunca escreve no CLP nem comanda movimentos.
+          </div>
+        </article>
+
+        <article class="panel capture-panel">
+          <div class="capture-header">
+            <div>
+              <span class="eyebrow">Próxima coleta</span>
+              <h2 id="next-point">Selecione um plano</h2>
+            </div>
+            <div class="plane-badge" id="current-plane">Z —</div>
+          </div>
+          <div class="target-region" id="target-region">
+            <div class="mini-fov"><i id="target-dot"></i></div>
+            <div><span>Região sugerida</span><strong id="region-name">—</strong><small id="point-role">—</small></div>
+          </div>
+          <div class="gate-list" id="gate-list">
+            <span data-gate="single_instance">Instância única</span>
+            <span data-gate="confidence">Confiança</span>
+            <span data-gate="mask_not_cut">Máscara íntegra</span>
+            <span data-gate="axis_quality">Eixo confiável</span>
+            <span data-gate="stable">Visão estável</span>
+            <span data-gate="pose">Pose recente</span>
+            <span data-gate="region">Região útil</span>
+            <span data-gate="plan_z">Plano Z correto</span>
+            <span data-gate="not_duplicate">Ponto novo</span>
+          </div>
+          <button class="capture-button" id="capture-button" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
+            <span><strong>CAPTURAR PONTO</strong><small>Congelar visão + pose</small></span>
+          </button>
+          <p class="capture-help" id="capture-help">Ative uma sessão e um plano para começar.</p>
+        </article>
+      </aside>
+    </section>
+
+    <section class="lower-grid">
+      <article class="panel plan-panel">
+        <div class="panel-heading compact">
+          <div><span class="eyebrow">Cobertura da sessão</span><h2>Planos Z</h2></div>
+          <span class="legend"><i></i> Ajuste <i></i> Validação</span>
+        </div>
+        <div class="plans" id="plans-list">
+          <div class="empty-inline">Crie ou abra uma sessão para visualizar os planos.</div>
+        </div>
+      </article>
+
+      <article class="panel metrics-panel">
+        <div class="panel-heading compact">
+          <div><span class="eyebrow">Limites provisórios POC</span><h2>Validação geométrica</h2></div>
+          <button class="icon-button" id="export-button" title="Exportar sessão" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg>
+          </button>
+        </div>
+        <div class="metric-grid">
+          <div><span>Erro XY · RMS</span><strong id="metric-xy-rms">—</strong><small>limite 20 mm</small></div>
+          <div><span>Erro XY · P95</span><strong id="metric-xy-p95">—</strong><small>milímetros</small></div>
+          <div><span>Erro angular · RMS</span><strong id="metric-angle-rms">—</strong><small>limite 5°</small></div>
+          <div><span>Erro máximo</span><strong id="metric-max">—</strong><small id="metric-status">aguardando modelo</small></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="panel history-panel">
+      <div class="panel-heading compact">
+        <div><span class="eyebrow">Trilha auditável</span><h2>Pontos confirmados</h2></div>
+        <span class="count-badge" id="pairs-count">0 pontos</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Plano</th><th>Tipo</th><th>Visão (px)</th><th>θv</th><th>Robô XYZ (mm)</th><th>Rz</th><th>Residual XY</th><th>Status</th></tr></thead>
+          <tbody id="pairs-table"><tr><td colspan="9" class="empty-table">Nenhum ponto gravado nesta sessão.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="session-dialog" class="modal">
+    <form method="dialog" id="session-form">
+      <div class="modal-heading"><div><span class="eyebrow">Configuração da coleta</span><h2>Nova sessão</h2></div><button value="cancel" class="close-button" aria-label="Fechar">×</button></div>
+      <label>Nome da sessão<input id="session-input-name" maxlength="120" placeholder="Ex.: POC Curitiba · turno manhã" required></label>
+      <label>Planos Z em milímetros<input id="session-input-planes" value="0, 200, 400" placeholder="0, 200, 400" required><small>Separe os valores por vírgula. Você pode adicionar ou remover planos antes de iniciar.</small></label>
+      <div class="spec-summary">
+        <div><strong>7</strong><span>pontos padrão / plano</span></div>
+        <div><strong>5 + 2</strong><span>ajuste + validação</span></div>
+        <div><strong>até 9</strong><span>expansão adaptativa</span></div>
+      </div>
+      <div class="modal-actions"><button value="cancel" class="button button-secondary">Cancelar</button><button type="submit" value="default" class="button button-primary">Criar e abrir sessão</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="candidate-dialog" class="modal candidate-modal">
+    <div class="confirmation-icon"><svg viewBox="0 0 24 24"><path d="M12 3 4 7v5c0 5 3.4 8.4 8 9 4.6-.6 8-4 8-9V7l-8-4Z"/><path d="m9 12 2 2 4-5"/></svg></div>
+    <span class="eyebrow">Candidato congelado</span>
+    <h2>Gravar esta posição do robô?</h2>
+    <p>Os valores abaixo estão congelados. Somente <strong>GRAVAR</strong> persiste o par Visão ↔ Robô.</p>
+    <div class="candidate-grid" id="candidate-values"></div>
+    <div class="modal-actions"><button class="button button-secondary" id="cancel-candidate">CANCELAR</button><button class="button button-confirm" id="confirm-candidate">GRAVAR</button></div>
+  </dialog>
+
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <script src="/assets/app.js" defer></script>
+</body>
+</html>

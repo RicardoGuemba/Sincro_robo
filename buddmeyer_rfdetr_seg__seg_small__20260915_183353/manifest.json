@@ -1,0 +1,24 @@
+{
+  "schema_version": "1",
+  "format": "buddmeyer.rfdetr_seg.bundle",
+  "task": "instance_segmentation",
+  "family": "rfdetr",
+  "backend": "rfdetr_seg",
+  "variant": "seg_small",
+  "ctor": "RFDETRSegSmall",
+  "resolution": 384,
+  "resolution_block": 24,
+  "weights": "checkpoint_best_total.pth",
+  "class_names": [
+    "sku"
+  ],
+  "num_classes": 1,
+  "default_threshold": 0.3,
+  "splits_used": [
+    "train",
+    "valid"
+  ],
+  "experiment_name": "RF_DETR_Seg_Small_20260915_164326",
+  "created_at": "2026-09-15T18:33:53",
+  "rfdetr_min": "1.1.0"
+}

@@ -1,0 +1,20 @@
+[Unit]
+Description=SINCRO_ROBO - calibração manual visão e robô
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sincro-robo
+Group=sincro-robo
+WorkingDirectory=/opt/sincro_robo
+EnvironmentFile=/etc/sincro-robo.env
+ExecStart=/opt/sincro_robo/scripts/run_pcbox.sh
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+

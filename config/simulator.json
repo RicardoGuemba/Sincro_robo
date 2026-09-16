@@ -1,0 +1,21 @@
+{
+  "app": {
+    "host": "127.0.0.1",
+    "port": 8080
+  },
+  "camera": {
+    "provider": "synthetic",
+    "target_fps": 8.0,
+    "width": 960,
+    "height": 540
+  },
+  "model": {
+    "provider": "synthetic",
+    "threshold": 0.3
+  },
+  "plc": {
+    "provider": "synthetic",
+    "poll_interval_s": 0.2
+  }
+}
+
