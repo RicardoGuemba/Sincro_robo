@@ -13,7 +13,7 @@ from typing import Any, Callable
 from .. import __version__
 from ..calibration import evaluate_plan, fit_plan_calibration
 from ..domain import CaptureCandidate, RobotPoseSnapshot, VisionObservation, utc_now
-from ..geometry import signed_axis_delta
+from ..geometry import configured_pixel_scales, signed_axis_delta
 from ..storage import Storage
 
 
@@ -93,6 +93,8 @@ class CaptureController:
         if len(set(normalized)) != len(normalized):
             raise ValueError("Os planos Z não podem ser duplicados")
         calibration = self.config["calibration"]
+        pixel_reference = self.config["pixel_reference"]
+        scale_x, scale_y = configured_pixel_scales(pixel_reference)
         snapshot = {
             "xy_tolerance_mm": calibration["xy_tolerance_mm"],
             "angular_tolerance_deg": calibration["angular_tolerance_deg"],
@@ -102,6 +104,14 @@ class CaptureController:
             "model_threshold": self.config["model"]["threshold"],
             "vision_quality": self.config["vision_quality"],
             "source_config": self.config["_config_path"],
+            "pixel_reference": {
+                "source_width": int(pixel_reference["source_width"]),
+                "source_height": int(pixel_reference["source_height"]),
+                "destination_width": int(pixel_reference["destination_width"]),
+                "destination_height": int(pixel_reference["destination_height"]),
+                "scale_x": scale_x,
+                "scale_y": scale_y,
+            },
         }
         return self.storage.create_session(
             clean_name,
@@ -145,6 +155,13 @@ class CaptureController:
             raise ValueError("O plano já atingiu o máximo de 9 pontos")
         region, role, target = POINT_REGIONS[index - 1]
         return index, region, role, target
+
+    def _image_normalized(self, observation: VisionObservation) -> tuple[float, float]:
+        overlay_x, overlay_y = observation.overlay_xy()
+        return (
+            overlay_x / max(1.0, float(observation.frame_width)),
+            overlay_y / max(1.0, float(observation.frame_height)),
+        )
 
     def _check_duplicate(
         self, session_id: str, plan_z: float, observation: VisionObservation
@@ -199,22 +216,14 @@ class CaptureController:
         except ValueError:
             result["ready"] = False
             return result
-        normalized_x = vision.x / max(1.0, float(vision.frame_width))
-        normalized_y = vision.y / max(1.0, float(vision.frame_height))
+        normalized_x, normalized_y = self._image_normalized(vision)
         radius = float(self.config["calibration"]["target_region_radius_norm"])
         result["region"] = math.hypot(normalized_x - target[0], normalized_y - target[1]) <= radius
         result["not_duplicate"] = not self._is_duplicate(session_id, plan_z, vision)
         if robot is not None:
             tolerance = float(self.config["calibration"]["plan_z_tolerance_mm"])
             result["plan_z"] = abs(robot.z - plan_z) <= tolerance
-        result["ready"] = all(
-            result[key]
-            for key in (
-                "session", "plan", "single_instance", "confidence", "mask_not_cut",
-                "axis_quality", "mask_area", "stable", "pose", "region", "plan_z",
-                "not_duplicate", "candidate_clear",
-            )
-        )
+        result["ready"] = result["session"] and result["plan"] and result["candidate_clear"] and robot is not None
         return result
 
     def capture(self) -> CaptureCandidate:
@@ -229,22 +238,8 @@ class CaptureController:
         robot = self.robot_supplier()
         if vision is None:
             raise ValueError("Visão indisponível")
-        if not all(vision.gates.values()) or not vision.stable:
-            raise ValueError("A visão ainda não está estável ou não passou nos gates")
-        if robot is None or not robot.fresh:
-            raise ValueError("Pose do robô indisponível ou desatualizada")
-        self._check_duplicate(session_id, plan_z, vision)
-        _point_index, _region, _role, target = self._next_point(session_id, plan_z)
-        normalized_x = vision.x / max(1.0, float(vision.frame_width))
-        normalized_y = vision.y / max(1.0, float(vision.frame_height))
-        radius = float(self.config["calibration"]["target_region_radius_norm"])
-        if math.hypot(normalized_x - target[0], normalized_y - target[1]) > radius:
-            raise ValueError("Molde fora da região útil sugerida para este ponto")
-        z_tolerance = float(self.config["calibration"]["plan_z_tolerance_mm"])
-        if abs(robot.z - plan_z) > z_tolerance:
-            raise ValueError(
-                f"Pose fora do plano: Z={robot.z:.2f} mm; esperado {plan_z:.2f} ± {z_tolerance:.2f} mm"
-            )
+        if robot is None:
+            raise ValueError("Pose do robô indisponível")
         point_index, region, role, _target = self._next_point(session_id, plan_z)
         candidate = CaptureCandidate(
             id=str(uuid.uuid4()),

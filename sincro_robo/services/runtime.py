@@ -170,15 +170,19 @@ class ApplicationRuntime:
                             len(result.masks),
                             frame.shape,
                             quality,
+                            self.config["pixel_reference"],
                         )
                         observation = stability.update(observation)
                     else:
                         stability.clear()
+                    overlay_x = overlay_y = None
+                    if observation is not None:
+                        overlay_x, overlay_y = observation.overlay_xy()
                     annotated = annotate_frame(
                         frame,
                         display_mask,
-                        observation.x if observation else None,
-                        observation.y if observation else None,
+                        overlay_x,
+                        overlay_y,
                         observation.angle_deg if observation else None,
                         observation.stable if observation else False,
                     )

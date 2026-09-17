@@ -16,6 +16,12 @@
   "plc": {
     "provider": "synthetic",
     "poll_interval_s": 0.2
+  },
+  "pixel_reference": {
+    "source_width": 960,
+    "source_height": 540,
+    "destination_width": 960,
+    "destination_height": 540
   }
 }
 

@@ -56,38 +56,84 @@ def test_confirm_persists_exactly_one_pair(controller: CaptureController) -> Non
     assert pairs[0]["robot"]["ry"] == pytest.approx(0.0)
 
 
-def test_duplicate_pair_is_rejected(controller: CaptureController) -> None:
+def test_simulator_session_records_identity_pixel_reference(controller: CaptureController) -> None:
+    session = controller.create_session("Simulador", [0.0, 200.0, 400.0])
+    reference = session["config"]["pixel_reference"]
+    assert reference["source_width"] == 960
+    assert reference["source_height"] == 540
+    assert reference["destination_width"] == 960
+    assert reference["destination_height"] == 540
+    assert reference["scale_x"] == pytest.approx(1.0)
+    assert reference["scale_y"] == pytest.approx(1.0)
+
+
+def test_duplicate_pair_is_advisory_and_still_capturable(controller: CaptureController) -> None:
     session = controller.create_session("Teste duplicidade", [0.0])
     controller.activate_plan(session["id"], 0.0)
     controller.capture()
     controller.decide(True)
-    with pytest.raises(ValueError, match="duplicado"):
-        controller.capture()
+    readiness = controller.capture_readiness()
+    assert not readiness["not_duplicate"]
+    assert readiness["ready"]
+    candidate = controller.capture()
+    assert candidate.point_index == 2
 
 
-def test_unstable_vision_cannot_be_frozen(controller: CaptureController) -> None:
+def test_unstable_vision_is_advisory_and_still_capturable(controller: CaptureController) -> None:
     unstable = valid_vision()
     object.__setattr__(unstable, "stable", False)
     controller.vision_supplier = lambda: unstable
     session = controller.create_session("Teste gate", [0.0])
     controller.activate_plan(session["id"], 0.0)
-    with pytest.raises(ValueError, match="estável"):
-        controller.capture()
+    readiness = controller.capture_readiness()
+    assert not readiness["stable"]
+    assert readiness["ready"]
+    candidate = controller.capture()
+    assert candidate.vision.stable is False
 
 
-def test_region_gate_rejects_point_outside_suggestion(controller: CaptureController) -> None:
+def test_region_gate_is_advisory_and_still_capturable(controller: CaptureController) -> None:
     controller.vision_supplier = lambda: valid_vision(850.0, 480.0)
     session = controller.create_session("Teste região", [0.0])
     controller.activate_plan(session["id"], 0.0)
-    assert not controller.capture_readiness()["region"]
-    with pytest.raises(ValueError, match="região útil"):
-        controller.capture()
+    readiness = controller.capture_readiness()
+    assert not readiness["region"]
+    assert readiness["ready"]
+    candidate = controller.capture()
+    assert candidate.vision.x == pytest.approx(850.0)
 
 
-def test_plan_gate_rejects_wrong_robot_z(controller: CaptureController) -> None:
+def test_plan_gate_is_advisory_and_still_capturable(controller: CaptureController) -> None:
     controller.robot_supplier = lambda: replace(valid_robot(), z=200.0)
     session = controller.create_session("Teste plano", [0.0])
     controller.activate_plan(session["id"], 0.0)
-    assert not controller.capture_readiness()["plan_z"]
-    with pytest.raises(ValueError, match="fora do plano"):
-        controller.capture()
+    readiness = controller.capture_readiness()
+    assert not readiness["plan_z"]
+    assert readiness["ready"]
+    candidate = controller.capture()
+    assert candidate.robot.z == pytest.approx(200.0)
+
+
+def test_operator_can_capture_with_all_quality_gates_red(controller: CaptureController) -> None:
+    vision = valid_vision(850.0, 480.0)
+    object.__setattr__(vision, "stable", False)
+    object.__setattr__(vision, "gates", {
+        "single_instance": False,
+        "confidence": False,
+        "mask_not_cut": False,
+        "axis_quality": False,
+        "mask_area": False,
+    })
+    controller.vision_supplier = lambda: vision
+    controller.robot_supplier = lambda: replace(valid_robot(), z=200.0, fresh=False)
+    session = controller.create_session("Captura livre", [0.0])
+    controller.activate_plan(session["id"], 0.0)
+    readiness = controller.capture_readiness()
+    assert readiness["ready"]
+    assert not readiness["single_instance"]
+    assert not readiness["stable"]
+    assert not readiness["pose"]
+    assert not readiness["region"]
+    assert not readiness["plan_z"]
+    candidate = controller.capture()
+    assert candidate.session_id == session["id"]

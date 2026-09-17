@@ -100,6 +100,7 @@ def create_app(config: dict[str, Any]) -> FastAPI:
             },
             "model_hash": runtime.controller.model_hash,
             "git_revision": runtime.controller.revision,
+            "pixel_reference": config["pixel_reference"],
         }
 
     @app.get("/api/sessions")

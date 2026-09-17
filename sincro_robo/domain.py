@@ -27,6 +27,19 @@ class VisionObservation:
     frame_width: int
     frame_height: int
     gates: dict[str, bool] = field(default_factory=dict)
+    native_x: float | None = None
+    native_y: float | None = None
+    scale_x: float = 1.0
+    scale_y: float = 1.0
+    reference_width: int | None = None
+    reference_height: int | None = None
+
+    def overlay_xy(self) -> tuple[float, float]:
+        """Pixel coordinates on the original camera frame (mask centroid)."""
+        return (
+            self.x if self.native_x is None else float(self.native_x),
+            self.y if self.native_y is None else float(self.native_y),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

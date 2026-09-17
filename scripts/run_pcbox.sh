@@ -9,8 +9,7 @@ if [[ ! -f /opt/sentech/.stprofile ]]; then
   exit 2
 fi
 if [[ -z "${SINCRO_PLC_IP:-}" ]]; then
-  echo "Defina SINCRO_PLC_IP com o IP confirmado do NX102." >&2
-  exit 2
+  export SINCRO_PLC_IP=192.168.250.1
 fi
 
 set +u

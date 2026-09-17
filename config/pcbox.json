@@ -21,11 +21,17 @@
   },
   "plc": {
     "provider": "cip",
-    "ip": "",
+    "ip": "192.168.250.1",
     "port": 44818,
     "connection_timeout_s": 10.0,
     "poll_interval_s": 0.2,
     "pose_tag": "RobFrom_Coord_CurrBase_Tool",
     "angle_unit": "degrees"
+  },
+  "pixel_reference": {
+    "source_width": 2592,
+    "source_height": 1944,
+    "destination_width": 960,
+    "destination_height": 720
   }
 }

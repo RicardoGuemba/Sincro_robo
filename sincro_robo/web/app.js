@@ -72,16 +72,15 @@ function renderGates(state) {
   document.querySelectorAll("#gate-list [data-gate]").forEach((node) => {
     node.classList.toggle("ok", Boolean(gates[node.dataset.gate]));
   });
-  const allOk = ["single_instance", "confidence", "mask_not_cut", "axis_quality", "stable", "pose", "region", "plan_z", "not_duplicate"].every((key) => gates[key]);
-  const ready = Boolean(gates.ready);
-  dom("capture-button").disabled = !ready || app.busy;
+  const canCapture = Boolean(gates.session && gates.plan && gates.candidate_clear && gates.ready) && !app.busy;
+  dom("capture-button").disabled = !canCapture;
   dom("capture-help").textContent = !state.active_session_id
     ? "Ative uma sessão e um plano para começar."
     : state.active_plan_z === null
       ? "Selecione o plano Z em que a coleta será feita."
-      : !allOk
-        ? "A captura será liberada quando todos os gates estiverem verdes."
-        : "Pronto para congelar visão e pose do robô.";
+      : !gates.candidate_clear
+        ? "Confirme ou cancele o candidato congelado antes de capturar outro ponto."
+        : "Os indicadores são só status. Capture o ponto quando julgar necessário.";
 }
 
 function renderPlans(session) {

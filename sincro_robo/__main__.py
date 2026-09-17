@@ -5,7 +5,7 @@ import argparse
 import uvicorn
 
 from .api import create_app
-from .config import load_config
+from .config import apply_sentech_environment, load_config
 
 
 def main() -> None:
@@ -14,6 +14,7 @@ def main() -> None:
     parser.add_argument("--host", default=None, help="Interface HTTP")
     parser.add_argument("--port", type=int, default=None, help="Porta HTTP")
     args = parser.parse_args()
+    apply_sentech_environment()
     config = load_config(args.config)
     host = args.host or config["app"]["host"]
     port = args.port or int(config["app"]["port"])

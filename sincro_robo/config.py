@@ -8,6 +8,8 @@ from typing import Any
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_CONFIG_FILE = "config/pcbox.json"
+SENTECH_ROOT = Path("/opt/sentech")
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "app": {
@@ -57,6 +59,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "max_jitter_y_px": 2.5,
         "max_jitter_angle_deg": 1.5,
     },
+    "pixel_reference": {
+        "source_width": 2592,
+        "source_height": 1944,
+        "destination_width": 960,
+        "destination_height": 720,
+    },
     "calibration": {
         "default_planes_mm": [0.0, 200.0, 400.0],
         "default_points_per_plane": 7,
@@ -89,8 +97,26 @@ def _resolve_path(value: str, root: Path) -> str:
     return str(path if path.is_absolute() else (root / path).resolve())
 
 
+def apply_sentech_environment() -> None:
+    """Put SentechSDK paths into the process env before stapipy is imported."""
+    lib = SENTECH_ROOT / "lib"
+    if not lib.is_dir():
+        return
+    genicam = lib / "GenICam"
+    os.environ["STAPI_ROOT_PATH"] = str(SENTECH_ROOT)
+    prepend = {
+        "LD_LIBRARY_PATH": (lib, genicam),
+        "LIBRARY_PATH": (lib, genicam),
+        "GENICAM_GENTL64_PATH": (lib,),
+    }
+    for key, extra_paths in prepend.items():
+        existing = [part for part in os.environ.get(key, "").split(":") if part]
+        prefix = [str(path) for path in extra_paths if path.is_dir() and str(path) not in existing]
+        os.environ[key] = ":".join(prefix + existing)
+
+
 def load_config(path: str | Path | None = None) -> dict[str, Any]:
-    config_path = Path(path or os.environ.get("SINCRO_CONFIG", "config/simulator.json"))
+    config_path = Path(path or os.environ.get("SINCRO_CONFIG", DEFAULT_CONFIG_FILE))
     if not config_path.is_absolute():
         config_path = PROJECT_ROOT / config_path
     overrides: dict[str, Any] = {}
@@ -102,6 +128,8 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
     plc_ip = os.environ.get("SINCRO_PLC_IP")
     if plc_ip:
         config["plc"]["ip"] = plc_ip
+    if config["camera"]["provider"] == "stapi":
+        apply_sentech_environment()
 
     for section, key in (
         ("app", "data_dir"),

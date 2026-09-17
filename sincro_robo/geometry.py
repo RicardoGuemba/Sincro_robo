@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, replace
 from math import atan2, degrees, sqrt
-from typing import Iterable
+from typing import Any, Iterable
 
 import numpy as np
 
@@ -24,6 +24,48 @@ def signed_axis_delta(angle_deg: float, reference_deg: float) -> float:
 def axis_angle_from_vector(vx: float, vy: float) -> float:
     # Image coordinates grow downwards, so atan2(vy, vx) is clockwise-positive.
     return normalize_axis_angle(degrees(atan2(float(vy), float(vx))))
+
+
+def configured_pixel_scales(pixel_reference: dict[str, Any]) -> tuple[float, float]:
+    source_width = int(pixel_reference["source_width"])
+    source_height = int(pixel_reference["source_height"])
+    destination_width = int(pixel_reference["destination_width"])
+    destination_height = int(pixel_reference["destination_height"])
+    if min(source_width, source_height, destination_width, destination_height) <= 0:
+        raise ValueError("pixel_reference deve ter resoluções positivas")
+    return destination_width / source_width, destination_height / source_height
+
+
+def reference_scale_factors(
+    frame_width: int,
+    frame_height: int,
+    pixel_reference: dict[str, Any] | None = None,
+) -> tuple[float, float]:
+    """Map native mask centroid pixels into the pick-and-place frame, once.
+
+    Identity when the frame is already the destination (e.g. 960×720) or when it
+    does not match the configured source resolution.
+    """
+    width = int(frame_width)
+    height = int(frame_height)
+    if width <= 0 or height <= 0:
+        raise ValueError("Resolução do frame inválida")
+    ref = pixel_reference or {}
+    source_width = int(ref.get("source_width", width))
+    source_height = int(ref.get("source_height", height))
+    destination_width = int(ref.get("destination_width", width))
+    destination_height = int(ref.get("destination_height", height))
+    if min(source_width, source_height, destination_width, destination_height) <= 0:
+        raise ValueError("pixel_reference deve ter resoluções positivas")
+    if width == destination_width and height == destination_height:
+        return 1.0, 1.0
+    if width == source_width and height == source_height:
+        return destination_width / source_width, destination_height / source_height
+    return 1.0, 1.0
+
+
+def map_to_reference(native_x: float, native_y: float, scale_x: float, scale_y: float) -> tuple[float, float]:
+    return float(native_x) * float(scale_x), float(native_y) * float(scale_y)
 
 
 @dataclass(frozen=True)
@@ -108,7 +150,8 @@ class VisionStabilityTracker:
                 sigma_y=0.0,
                 sigma_angle_deg=0.0,
             )
-        self._history.append((observation.x, observation.y, observation.angle_deg))
+        overlay_x, overlay_y = observation.overlay_xy()
+        self._history.append((overlay_x, overlay_y, observation.angle_deg))
         if len(self._history) < self.samples:
             return replace(observation, stable=False)
 
@@ -141,6 +184,7 @@ def build_observation(
     instance_count: int,
     frame_shape: Iterable[int],
     quality: dict[str, float],
+    pixel_reference: dict[str, Any] | None = None,
 ) -> VisionObservation:
     height, width = list(frame_shape)[:2]
     gates = {
@@ -152,10 +196,13 @@ def build_observation(
         <= pose.mask_area_ratio
         <= quality["max_mask_area_ratio"],
     }
+    scale_x, scale_y = reference_scale_factors(int(width), int(height), pixel_reference)
+    mapped_x, mapped_y = map_to_reference(pose.x, pose.y, scale_x, scale_y)
+    ref = pixel_reference or {}
     return VisionObservation(
         timestamp=utc_now(),
-        x=pose.x,
-        y=pose.y,
+        x=mapped_x,
+        y=mapped_y,
         angle_deg=pose.angle_deg,
         confidence=float(confidence),
         axis_quality=pose.axis_quality,
@@ -169,5 +216,11 @@ def build_observation(
         frame_width=int(width),
         frame_height=int(height),
         gates=gates,
+        native_x=pose.x,
+        native_y=pose.y,
+        scale_x=scale_x,
+        scale_y=scale_y,
+        reference_width=int(ref.get("destination_width", width)),
+        reference_height=int(ref.get("destination_height", height)),
     )
 

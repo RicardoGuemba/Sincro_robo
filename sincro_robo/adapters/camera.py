@@ -97,6 +97,9 @@ class StApiCamera:
             raise RuntimeError("Câmera StApi já está aberta")
         self._owner_thread = threading.get_ident()
         try:
+            from ..config import apply_sentech_environment
+
+            apply_sentech_environment()
             import stapipy as st  # type: ignore[import-not-found]
 
             self._st = st

@@ -126,7 +126,8 @@ select:focus, input:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgb
 .mini-fov i { position: absolute; width: 9px; height: 9px; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 2px solid var(--amber); border-radius: 50%; box-shadow: 0 0 9px rgb(255 181 71 / 60%); transition: left .3s, top .3s; }
 .target-region span, .target-region small { display: block; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .07em; }
 .target-region strong { display: block; margin: 5px 0; font-size: 13px; }
-.gate-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 13px; }
+.gate-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+.gate-hint { margin: 0 0 13px; text-align: center; color: var(--muted); font-size: 9px; }
 .gate-list span { padding: 6px 8px 6px 23px; border-radius: 5px; background: #121f29; color: var(--muted); font-size: 9px; position: relative; }
 .gate-list span:before { content: ""; position: absolute; left: 9px; top: 9px; width: 6px; height: 6px; border-radius: 50%; background: #526674; }
 .gate-list span.ok { color: #b8e8dc; background: #102823; }
