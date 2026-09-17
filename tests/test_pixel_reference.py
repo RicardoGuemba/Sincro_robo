@@ -115,7 +115,14 @@ def test_overlay_draws_native_point_not_pick_point() -> None:
         PICK_REFERENCE,
     )
     overlay_x, overlay_y = observation.overlay_xy()
-    annotated = annotate_frame(frame, mask, overlay_x, overlay_y, observation.angle_deg, True)
+    annotated = annotate_frame(
+        frame,
+        mask,
+        overlay_x,
+        overlay_y,
+        observation.angle_deg,
+        major_axis_length=40.0,
+    )
     native = tuple(int(round(value)) for value in (overlay_x, overlay_y))
     pick = tuple(int(round(value)) for value in (observation.x, observation.y))
     assert annotated[native[1], native[0]].sum() > 0

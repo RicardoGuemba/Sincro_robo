@@ -12,6 +12,7 @@ from ..adapters.plc import CipPoseReader, SyntheticPoseReader
 from ..adapters.segmenter import RFDetrSegmenter, SyntheticSegmenter, annotate_frame
 from ..domain import RobotPoseSnapshot, VisionObservation, utc_now
 from ..geometry import MoldPoseEstimator, VisionStabilityTracker, build_observation
+from ..overlay import overlay_stroke_scale
 from ..storage import Storage
 from .capture import CaptureController
 
@@ -160,10 +161,12 @@ class ApplicationRuntime:
                     result = segmenter.predict(frame)
                     observation = None
                     display_mask = None
+                    major_axis_length = None
                     if result.masks:
                         best_index = max(range(len(result.masks)), key=lambda index: result.confidences[index])
                         display_mask = result.masks[best_index]
                         pose = estimator.estimate(display_mask)
+                        major_axis_length = pose.major_axis_length
                         observation = build_observation(
                             pose,
                             result.confidences[best_index],
@@ -176,15 +179,18 @@ class ApplicationRuntime:
                     else:
                         stability.clear()
                     overlay_x = overlay_y = None
+                    stroke_scale = 1.0
                     if observation is not None:
                         overlay_x, overlay_y = observation.overlay_xy()
+                        stroke_scale = overlay_stroke_scale(observation.scale_x, observation.scale_y)
                     annotated = annotate_frame(
                         frame,
                         display_mask,
                         overlay_x,
                         overlay_y,
                         observation.angle_deg if observation else None,
-                        observation.stable if observation else False,
+                        major_axis_length=major_axis_length,
+                        stroke_scale=stroke_scale,
                     )
                     ok, encoded = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 86])
                     with self.state._lock:

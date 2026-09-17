@@ -97,38 +97,19 @@ def annotate_frame(
     x: float | None = None,
     y: float | None = None,
     angle_deg: float | None = None,
-    stable: bool = False,
+    *,
+    major_axis_length: float | None = None,
+    stroke_scale: float = 1.0,
 ) -> np.ndarray:
-    annotated = frame.copy()
-    if mask is not None:
-        binary = np.asarray(mask, dtype=bool)
-        overlay = annotated.copy()
-        overlay[binary] = (50, 209, 176)
-        annotated = cv2.addWeighted(overlay, 0.38, annotated, 0.62, 0)
-        contours, _hierarchy = cv2.findContours(
-            binary.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        cv2.drawContours(annotated, contours, -1, (115, 255, 226), 2, cv2.LINE_AA)
-    if x is not None and y is not None and angle_deg is not None:
-        center = (int(round(x)), int(round(y)))
-        length = 125
-        radians_value = np.radians(angle_deg)
-        direction = np.asarray([np.cos(radians_value), np.sin(radians_value)])
-        start = tuple(np.rint(np.asarray(center) - direction * length).astype(int))
-        end = tuple(np.rint(np.asarray(center) + direction * length).astype(int))
-        color = (71, 231, 186) if stable else (40, 183, 255)
-        cv2.line(annotated, start, end, color, 4, cv2.LINE_AA)
-        cv2.circle(annotated, center, 8, (245, 250, 252), 2, cv2.LINE_AA)
-        label = f"theta={angle_deg:05.1f} deg"
-        cv2.putText(
-            annotated,
-            label,
-            (center[0] + 14, max(28, center[1] - 14)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.66,
-            color,
-            2,
-            cv2.LINE_AA,
-        )
-    return annotated
+    from ..overlay import annotate_pick_overlay
+
+    return annotate_pick_overlay(
+        frame,
+        mask,
+        x,
+        y,
+        angle_deg,
+        major_axis_length,
+        stroke_scale,
+    )
 

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, replace
-from math import atan2, degrees, sqrt
-from typing import Any, Iterable
+from math import atan2, cos, degrees, radians, sin, sqrt
+from typing import Any, Iterable, Optional
 
 import numpy as np
 
@@ -78,6 +78,66 @@ class EstimatedMaskPose:
     axis_quality: float
     mask_area_ratio: float
     mask_cut: bool
+    major_axis_length: float = 0.0
+    minor_axis_length: float = 0.0
+
+
+def _angle_and_sides_from_min_area_rect(
+    bool_mask: np.ndarray,
+) -> Optional[tuple[float, float, float]]:
+    """minAreaRect on the largest contour → (angle_deg, major_len, minor_len)."""
+    import cv2
+
+    bin_mask = np.asarray(bool_mask, dtype=np.uint8)
+    contours, _hierarchy = cv2.findContours(
+        bin_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+    if not contours:
+        return None
+    contour = max(contours, key=cv2.contourArea)
+    if contour.shape[0] < 3:
+        return None
+    (_centre, (width, height), angle_rect) = cv2.minAreaRect(contour)
+    width = float(width)
+    height = float(height)
+    if width <= 0 and height <= 0:
+        return None
+    if width >= height:
+        major_len, minor_len = width, height
+        angle = float(angle_rect)
+    else:
+        major_len, minor_len = height, width
+        angle = float(angle_rect) + 90.0
+    return normalize_axis_angle(angle), major_len, max(minor_len, 1.0)
+
+
+def _angle_and_sides_from_pca(
+    xs: np.ndarray,
+    ys: np.ndarray,
+    mean_x: float,
+    mean_y: float,
+) -> tuple[float, float, float]:
+    """Fallback PCA: angle in [0, 180), side lengths ≈ 4·sqrt(λ)."""
+    dx = xs.astype(np.float64) - mean_x
+    dy = ys.astype(np.float64) - mean_y
+    cov_xx = float(np.mean(dx * dx))
+    cov_yy = float(np.mean(dy * dy))
+    cov_xy = float(np.mean(dx * dy))
+    covariance = np.array([[cov_xx, cov_xy], [cov_xy, cov_yy]], dtype=np.float64)
+    try:
+        eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+    except np.linalg.LinAlgError:
+        return 0.0, 1.0, 1.0
+    order = np.argsort(eigenvalues)[::-1]
+    eigenvalues = eigenvalues[order]
+    eigenvectors = eigenvectors[:, order]
+    major_value = max(float(eigenvalues[0]), 0.0)
+    minor_value = max(float(eigenvalues[1]), 0.0)
+    major_vec = eigenvectors[:, 0]
+    angle = axis_angle_from_vector(float(major_vec[0]), float(major_vec[1]))
+    major_len = 4.0 * float(np.sqrt(major_value)) if major_value > 0 else 1.0
+    minor_len = 4.0 * float(np.sqrt(minor_value)) if minor_value > 0 else 1.0
+    return angle, major_len, minor_len
 
 
 class MoldPoseEstimator:
@@ -94,14 +154,12 @@ class MoldPoseEstimator:
 
         x = float(xs.mean())
         y = float(ys.mean())
-        centered = np.column_stack((xs - x, ys - y)).astype(np.float64)
-        covariance = centered.T @ centered / max(1, centered.shape[0] - 1)
-        eigenvalues, eigenvectors = np.linalg.eigh(covariance)
-        order = np.argsort(eigenvalues)
-        major = eigenvectors[:, order[-1]]
-        major_value = float(eigenvalues[order[-1]])
-        minor_value = max(float(eigenvalues[order[-2]]), 1e-12)
-        axis_quality = major_value / minor_value
+        rect = _angle_and_sides_from_min_area_rect(binary)
+        if rect is not None:
+            angle_deg, major_len, minor_len = rect
+        else:
+            angle_deg, major_len, minor_len = _angle_and_sides_from_pca(xs, ys, x, y)
+        axis_quality = float(major_len / minor_len) if minor_len > 1e-9 else 1.0
 
         margin = self.border_margin_px
         h, w = binary.shape
@@ -114,12 +172,14 @@ class MoldPoseEstimator:
         return EstimatedMaskPose(
             x=x,
             y=y,
-            angle_deg=axis_angle_from_vector(float(major[0]), float(major[1])),
-            axis_vx=float(major[0]),
-            axis_vy=float(major[1]),
+            angle_deg=angle_deg,
+            axis_vx=cos(radians(angle_deg)),
+            axis_vy=sin(radians(angle_deg)),
             axis_quality=axis_quality,
             mask_area_ratio=float(binary.mean()),
             mask_cut=mask_cut,
+            major_axis_length=float(major_len),
+            minor_axis_length=float(minor_len),
         )
 
 
