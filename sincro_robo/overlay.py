@@ -10,6 +10,7 @@ import numpy as np
 PICK_MASK_COLOR_BGR = (0, 255, 128)
 PICK_MASK_FILL_ALPHA = 0.40
 PICK_MASK_CONTOUR_THICKNESS = 3
+PICK_BBOX_THICKNESS = 3
 PICK_MAJOR_AXIS_COLOR_BGR = (255, 0, 255)
 PICK_ANGLE_REF_COLOR_BGR = (220, 220, 220)
 PICK_ANGLE_ARC_COLOR_BGR = (255, 0, 255)
@@ -39,6 +40,21 @@ class AngleOverlayGeometry:
     magenta_end: Point
     ref_segments: tuple[Segment, ...]
     arc_points: tuple[Point, ...]
+
+
+def aabb_from_mask(mask: np.ndarray) -> tuple[int, int, int, int] | None:
+    """Axis-aligned bbox from mask pixels, exclusive x2/y2, same as v2108."""
+    binary = np.asarray(mask)
+    if binary.dtype == bool:
+        active = binary
+    elif np.issubdtype(binary.dtype, np.floating):
+        active = binary > 0.5
+    else:
+        active = binary > 0
+    ys, xs = np.nonzero(active)
+    if xs.size == 0 or ys.size == 0:
+        return None
+    return int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
 
 
 def overlay_stroke_scale(scale_x: float, scale_y: float) -> float:
@@ -271,7 +287,7 @@ def annotate_pick_overlay(
     major_axis_length: float | None = None,
     stroke_scale: float = 1.0,
 ) -> np.ndarray:
-    """Pick mask + v2108 angle overlay. No metric labels."""
+    """Pick mask + v2108 AABB + angle overlay. No metric labels."""
     import cv2
 
     annotated = frame.copy()
@@ -305,6 +321,16 @@ def annotate_pick_overlay(
                 PICK_MASK_COLOR_BGR,
                 thickness=_stroke_px(PICK_MASK_CONTOUR_THICKNESS, scale),
                 lineType=cv2.LINE_AA,
+            )
+        box = aabb_from_mask(binary)
+        if box is not None:
+            x1, y1, x2, y2 = box
+            cv2.rectangle(
+                annotated,
+                (x1, y1),
+                (x2, y2),
+                PICK_MASK_COLOR_BGR,
+                _stroke_px(PICK_BBOX_THICKNESS, scale),
             )
     if x is None or y is None:
         return annotated

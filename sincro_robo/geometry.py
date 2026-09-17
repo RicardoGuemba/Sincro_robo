@@ -85,7 +85,10 @@ class EstimatedMaskPose:
 def _angle_and_sides_from_min_area_rect(
     bool_mask: np.ndarray,
 ) -> Optional[tuple[float, float, float]]:
-    """minAreaRect on the largest contour → (angle_deg, major_len, minor_len)."""
+    """minAreaRect on the largest contour → (angle_deg, major_len, minor_len).
+
+    θ comes from this rotated bounding box, not from the painted mask silhouette.
+    """
     import cv2
 
     bin_mask = np.asarray(bool_mask, dtype=np.uint8)

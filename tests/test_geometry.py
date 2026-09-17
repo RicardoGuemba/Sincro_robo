@@ -78,6 +78,18 @@ def test_angle_90_for_vertical_rect() -> None:
     assert pose.axis_quality > 3.0
 
 
+def test_angle_comes_from_min_area_rect_not_axis_aligned_bbox() -> None:
+    mask = _rotated_rect_mask(300, 300, cx=150, cy=150, rw=120, rh=25, angle_deg=45)
+    pose = MoldPoseEstimator(border_margin_px=2).estimate(mask)
+    width = np.where(mask.any(axis=0))[0]
+    height = np.where(mask.any(axis=1))[0]
+    aabb_w = int(width[-1] - width[0] + 1)
+    aabb_h = int(height[-1] - height[0] + 1)
+    aabb_angle = 0.0 if aabb_w >= aabb_h else 90.0
+    assert _circular_diff(pose.angle_deg, 45.0) < 5.0
+    assert _circular_diff(pose.angle_deg, aabb_angle) > 20.0
+
+
 @pytest.mark.parametrize("angle", [0, 15, 30, 45, 60, 75, 120, 150])
 def test_angle_matches_rotated_rect(angle: float) -> None:
     mask = _rotated_rect_mask(300, 300, cx=150, cy=150, rw=120, rh=25, angle_deg=angle)

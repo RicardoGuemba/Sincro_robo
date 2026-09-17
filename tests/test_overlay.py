@@ -13,6 +13,7 @@ from sincro_robo.overlay import (
     PICK_CENTROID_COLOR_BGR,
     PICK_MAJOR_AXIS_COLOR_BGR,
     PICK_MASK_COLOR_BGR,
+    aabb_from_mask,
     compute_angle_overlay_geometry,
     overlay_stroke_scale,
 )
@@ -40,6 +41,22 @@ def _neighborhood_has_color(img: np.ndarray, y: int, x: int, color, r: int = 2) 
     y0, y1 = max(0, y - r), min(height, y + r + 1)
     x0, x1 = max(0, x - r), min(width, x + r + 1)
     return _color_hits(img[y0:y1, x0:x1], color)
+
+
+def test_aabb_from_mask_is_exclusive_max_like_v2108() -> None:
+    mask = np.zeros((200, 200), dtype=bool)
+    mask[60:140, 80:160] = True
+    assert aabb_from_mask(mask) == (80, 60, 160, 140)
+
+
+def test_overlay_draws_axis_aligned_bbox() -> None:
+    frame = np.zeros((200, 200, 3), dtype=np.uint8)
+    mask = np.zeros((200, 200), dtype=bool)
+    mask[60:140, 80:160] = True
+    out = annotate_frame(frame, mask, 20.0, 20.0)
+    assert _row_has_color(out, 60, 90, 150, PICK_MASK_COLOR_BGR)
+    assert _col_has_color(out, 80, 70, 120, PICK_MASK_COLOR_BGR)
+    assert np.array_equal(out[50, 70], (0, 0, 0))
 
 
 def test_native_frame_stroke_scale_is_inverse_of_pick_map() -> None:
