@@ -61,6 +61,21 @@ class RobotPoseSnapshot:
 
 
 @dataclass(frozen=True)
+class FrozenVisionCapture:
+    id: str
+    session_id: str
+    plan_z: float
+    point_index: int
+    role: str
+    region: str
+    vision: VisionObservation
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class CaptureCandidate:
     id: str
     session_id: str
@@ -75,6 +90,6 @@ class CaptureCandidate:
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
-        result["prompt"] = "Gravar esta posição do robô?"
+        result["prompt"] = "Ponto registrado"
         return result
 

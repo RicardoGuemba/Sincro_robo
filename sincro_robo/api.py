@@ -134,7 +134,7 @@ def create_app(config: dict[str, Any]) -> FastAPI:
 
     @app.post("/api/capture")
     def capture() -> dict[str, Any]:
-        return runtime.controller.capture().to_dict()
+        return runtime.controller.capture()
 
     @app.post("/api/candidate/decision")
     def candidate_decision(request: Decision) -> dict[str, Any]:

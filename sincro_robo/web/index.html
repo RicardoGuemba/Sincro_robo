@@ -141,10 +141,24 @@
             <span data-gate="not_duplicate">Ponto novo</span>
           </div>
           <p class="gate-hint">Indicadores visuais para o operador — não bloqueiam a captura.</p>
+          <div class="frozen-vision" id="frozen-vision" hidden>
+            <span class="frozen-badge">Visão congelada (1/2)</span>
+            <div class="frozen-readings">
+              <div><span>Xv</span><strong id="frozen-x">—</strong></div>
+              <div><span>Yv</span><strong id="frozen-y">—</strong></div>
+              <div><span>θv</span><strong id="frozen-angle">—</strong></div>
+            </div>
+          </div>
+          <div class="capture-feedback" id="capture-feedback" hidden>
+            <span class="eyebrow">Após o último ponto</span>
+            <strong id="feedback-rmse">—</strong>
+            <small id="feedback-suggestion">—</small>
+          </div>
           <button class="capture-button" id="capture-button" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
-            <span><strong>CAPTURAR PONTO</strong><small>Congelar visão + pose</small></span>
+            <span><strong id="capture-label">CAPTURAR COORDENADAS DA VISÃO (1/2)</strong><small id="capture-sublabel">Congelar Xv, Yv e θ</small></span>
           </button>
+          <button class="button button-secondary discard-button" id="discard-button" hidden>Descartar visão congelada</button>
           <p class="capture-help" id="capture-help">Ative uma sessão e um plano para começar.</p>
         </article>
       </aside>
@@ -203,15 +217,6 @@
       </div>
       <div class="modal-actions"><button value="cancel" class="button button-secondary">Cancelar</button><button type="submit" value="default" class="button button-primary">Criar e abrir sessão</button></div>
     </form>
-  </dialog>
-
-  <dialog id="candidate-dialog" class="modal candidate-modal">
-    <div class="confirmation-icon"><svg viewBox="0 0 24 24"><path d="M12 3 4 7v5c0 5 3.4 8.4 8 9 4.6-.6 8-4 8-9V7l-8-4Z"/><path d="m9 12 2 2 4-5"/></svg></div>
-    <span class="eyebrow">Candidato congelado</span>
-    <h2>Gravar esta posição do robô?</h2>
-    <p>Os valores abaixo estão congelados. Somente <strong>GRAVAR</strong> persiste o par Visão ↔ Robô.</p>
-    <div class="candidate-grid" id="candidate-values"></div>
-    <div class="modal-actions"><button class="button button-secondary" id="cancel-candidate">CANCELAR</button><button class="button button-confirm" id="confirm-candidate">GRAVAR</button></div>
   </dialog>
 
   <div class="toast-region" id="toast-region" aria-live="polite"></div>

@@ -69,18 +69,40 @@ function renderRobot(robot) {
 
 function renderGates(state) {
   const gates = state.capture_readiness || {};
+  const step = gates.step || "vision";
+  const frozen = state.frozen_vision;
   document.querySelectorAll("#gate-list [data-gate]").forEach((node) => {
     node.classList.toggle("ok", Boolean(gates[node.dataset.gate]));
   });
-  const canCapture = Boolean(gates.session && gates.plan && gates.candidate_clear && gates.ready) && !app.busy;
+  const canCapture = Boolean(gates.session && gates.plan && gates.ready) && !app.busy;
   dom("capture-button").disabled = !canCapture;
+  const discard = dom("discard-button");
+  discard.hidden = step !== "robot";
+  discard.disabled = app.busy || step !== "robot";
+  if (step === "robot") {
+    dom("capture-label").textContent = "CAPTURAR COORDENADAS DO ROBÔ (2/2)";
+    dom("capture-sublabel").textContent = "Congelar pose CIP e gravar o ponto";
+  } else {
+    dom("capture-label").textContent = "CAPTURAR COORDENADAS DA VISÃO (1/2)";
+    dom("capture-sublabel").textContent = "Congelar Xv, Yv e θ";
+  }
+  const frozenBox = dom("frozen-vision");
+  if (frozen) {
+    frozenBox.hidden = false;
+    const vision = frozen.vision;
+    dom("frozen-x").textContent = fmt(vision.x, 1);
+    dom("frozen-y").textContent = fmt(vision.y, 1);
+    dom("frozen-angle").textContent = `${fmt(vision.angle_deg, 1)}°`;
+  } else {
+    frozenBox.hidden = true;
+  }
   dom("capture-help").textContent = !state.active_session_id
     ? "Ative uma sessão e um plano para começar."
     : state.active_plan_z === null
       ? "Selecione o plano Z em que a coleta será feita."
-      : !gates.candidate_clear
-        ? "Confirme ou cancele o candidato congelado antes de capturar outro ponto."
-        : "Os indicadores são só status. Capture o ponto quando julgar necessário.";
+      : step === "robot"
+        ? "Visão congelada. Posicione o robô e capture a pose. A câmera pode perder o objeto."
+        : "Os indicadores são só status. Capture a visão quando o molde estiver visível.";
 }
 
 function renderPlans(session) {
@@ -121,6 +143,19 @@ function renderCaptureTarget(session) {
   dom("target-dot").style.top = `${y * 100}%`;
 }
 
+function renderFeedback(feedback) {
+  const box = dom("capture-feedback");
+  if (!feedback) {
+    box.hidden = true;
+    box.className = "capture-feedback";
+    return;
+  }
+  box.hidden = false;
+  box.className = `capture-feedback ${feedback.suggestion_kind || ""}`;
+  dom("feedback-rmse").textContent = feedback.message || "—";
+  dom("feedback-suggestion").textContent = `Sugestão: ${feedback.suggestion || "—"}`;
+}
+
 function renderMetrics(session) {
   const plan = currentPlan(session);
   const metrics = plan?.evaluation?.ready ? plan.evaluation.metrics : null;
@@ -152,22 +187,7 @@ function renderSession(session) {
   renderCaptureTarget(session);
   renderMetrics(session);
   renderPairs(session);
-}
-
-function renderCandidate(candidate) {
-  const dialog = dom("candidate-dialog");
-  if (!candidate) {
-    if (dialog.open) dialog.close();
-    return;
-  }
-  const v = candidate.vision;
-  const r = candidate.robot;
-  dom("candidate-values").innerHTML = `
-    <div><span>Ponto / plano</span><strong>${String(candidate.point_index).padStart(2, "0")} · Z=${fmt(candidate.plan_z, 0)} mm</strong></div>
-    <div><span>Região</span><strong>${candidate.region}</strong></div>
-    <div><span>Visão</span><strong>Xv ${fmt(v.x, 1)} · Yv ${fmt(v.y, 1)} · θ ${fmt(v.angle_deg, 1)}°</strong></div>
-    <div><span>Robô</span><strong>X ${fmt(r.x, 1)} · Y ${fmt(r.y, 1)} · Z ${fmt(r.z, 1)} · Rz ${fmt(r.rz, 1)}°</strong></div>`;
-  if (!dialog.open) dialog.showModal();
+  renderFeedback(app.state?.capture_feedback);
 }
 
 function render(state) {
@@ -178,7 +198,6 @@ function render(state) {
   renderRobot(state.robot);
   renderGates(state);
   renderSession(state.session);
-  renderCandidate(state.candidate);
 }
 
 async function refreshState() {
@@ -212,18 +231,21 @@ async function capture() {
   app.busy = true;
   dom("capture-button").disabled = true;
   try {
-    await api("/api/capture", { method: "POST" });
+    const result = await api("/api/capture", { method: "POST" });
     await refreshState();
+    if (result.saved) {
+      toast("Ponto registrado.");
+    }
   } catch (error) { toast(error.message, "error"); }
   finally { app.busy = false; }
 }
 
-async function decide(confirm) {
+async function discardFrozen() {
+  if (app.busy) return;
   try {
-    const result = await api("/api/candidate/decision", { method: "POST", body: JSON.stringify({ confirm }) });
-    toast(confirm && result.saved ? "Ponto gravado e validação atualizada." : "Candidato descartado; nenhum dado foi persistido.");
+    await api("/api/candidate/decision", { method: "POST", body: JSON.stringify({ confirm: false }) });
     await refreshState();
-    await refreshSessions();
+    toast("Visão congelada descartada; nenhum ponto foi gravado.");
   } catch (error) { toast(error.message, "error"); }
 }
 
@@ -272,8 +294,7 @@ dom("session-form").addEventListener("submit", async (event) => {
   } catch (error) { toast(error.message, "error"); }
 });
 dom("capture-button").addEventListener("click", capture);
-dom("cancel-candidate").addEventListener("click", () => decide(false));
-dom("confirm-candidate").addEventListener("click", () => decide(true));
+dom("discard-button").addEventListener("click", discardFrozen);
 dom("export-button").addEventListener("click", async () => {
   if (!app.state?.active_session_id) return;
   try {

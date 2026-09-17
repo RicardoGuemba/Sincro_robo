@@ -281,7 +281,12 @@ class ApplicationRuntime:
             "model": self.config["model"]["provider"],
             "plc": self.config["plc"]["provider"],
         }
-        payload["candidate"] = self.controller.candidate.to_dict() if self.controller.candidate else None
+        payload["frozen_vision"] = (
+            self.controller.frozen_vision.to_dict() if self.controller.frozen_vision else None
+        )
+        payload["capture_step"] = "robot" if self.controller.frozen_vision else "vision"
+        payload["capture_feedback"] = self.controller.last_feedback
+        payload["candidate"] = None
         payload["capture_readiness"] = self.controller.capture_readiness()
         payload["active_session_id"] = self.controller.active_session_id
         payload["active_plan_z"] = self.controller.active_plan_z

@@ -243,7 +243,7 @@ def test_persisted_and_exported_coordinates_are_pick_space(tmp_path: Path) -> No
     session = controller.create_session("Export pick", [0.0])
     controller.activate_plan(session["id"], 0.0)
     controller.capture()
-    saved = controller.decide(True)
+    saved = controller.capture()
     pair = saved["pair"]
     assert pair["vision"]["x"] == pytest.approx(pick_x)
     assert pair["vision"]["y"] == pytest.approx(pick_y)

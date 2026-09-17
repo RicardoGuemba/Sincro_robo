@@ -12,7 +12,7 @@ from typing import Any, Callable
 
 from .. import __version__
 from ..calibration import evaluate_plan, fit_plan_calibration
-from ..domain import CaptureCandidate, RobotPoseSnapshot, VisionObservation, utc_now
+from ..domain import CaptureCandidate, FrozenVisionCapture, RobotPoseSnapshot, VisionObservation, utc_now
 from ..geometry import configured_pixel_scales, signed_axis_delta
 from ..storage import Storage
 
@@ -71,15 +71,21 @@ class CaptureController:
         self.project_root = project_root
         self.active_session_id: str | None = None
         self.active_plan_z: float | None = None
-        self._candidate: CaptureCandidate | None = None
+        self._frozen: FrozenVisionCapture | None = None
+        self._last_feedback: dict[str, Any] | None = None
         self._lock = threading.RLock()
         self.model_hash = sha256_file(config["model"]["checkpoint"])
         self.revision = git_revision(project_root)
 
     @property
-    def candidate(self) -> CaptureCandidate | None:
+    def frozen_vision(self) -> FrozenVisionCapture | None:
         with self._lock:
-            return self._candidate
+            return self._frozen
+
+    @property
+    def last_feedback(self) -> dict[str, Any] | None:
+        with self._lock:
+            return self._last_feedback
 
     def create_session(self, name: str, planes: list[float]) -> dict[str, Any]:
         clean_name = name.strip()
@@ -130,7 +136,8 @@ class CaptureController:
         with self._lock:
             self.active_session_id = session_id
             self.active_plan_z = None
-            self._candidate = None
+            self._frozen = None
+            self._last_feedback = None
         return self.session_detail(session_id)
 
     def activate_plan(self, session_id: str, plan_z: float) -> dict[str, Any]:
@@ -144,7 +151,7 @@ class CaptureController:
             self.activate_session(session_id)
         with self._lock:
             self.active_plan_z = value
-            self._candidate = None
+            self._frozen = None
         self.storage.audit(session_id, "plan_activated", {"plan_z": value})
         return self.session_detail(session_id)
 
@@ -190,12 +197,14 @@ class CaptureController:
         with self._lock:
             session_id = self.active_session_id
             plan_z = self.active_plan_z
-            candidate_pending = self._candidate is not None
+            frozen = self._frozen
         vision = self.vision_supplier()
         robot = self.robot_supplier()
+        step = "robot" if frozen is not None else "vision"
         result: dict[str, Any] = {
             "session": session_id is not None,
             "plan": plan_z is not None,
+            "step": step,
             "single_instance": bool(vision and vision.gates.get("single_instance")),
             "confidence": bool(vision and vision.gates.get("confidence")),
             "mask_not_cut": bool(vision and vision.gates.get("mask_not_cut")),
@@ -206,9 +215,9 @@ class CaptureController:
             "region": False,
             "plan_z": False,
             "not_duplicate": False,
-            "candidate_clear": not candidate_pending,
+            "candidate_clear": frozen is None,
         }
-        if session_id is None or plan_z is None or vision is None:
+        if session_id is None or plan_z is None:
             result["ready"] = False
             return result
         try:
@@ -216,32 +225,38 @@ class CaptureController:
         except ValueError:
             result["ready"] = False
             return result
-        normalized_x, normalized_y = self._image_normalized(vision)
-        radius = float(self.config["calibration"]["target_region_radius_norm"])
-        result["region"] = math.hypot(normalized_x - target[0], normalized_y - target[1]) <= radius
-        result["not_duplicate"] = not self._is_duplicate(session_id, plan_z, vision)
+        gate_vision = frozen.vision if frozen is not None else vision
+        if gate_vision is not None:
+            normalized_x, normalized_y = self._image_normalized(gate_vision)
+            radius = float(self.config["calibration"]["target_region_radius_norm"])
+            result["region"] = math.hypot(normalized_x - target[0], normalized_y - target[1]) <= radius
+            result["not_duplicate"] = not self._is_duplicate(session_id, plan_z, gate_vision)
         if robot is not None:
             tolerance = float(self.config["calibration"]["plan_z_tolerance_mm"])
             result["plan_z"] = abs(robot.z - plan_z) <= tolerance
-        result["ready"] = result["session"] and result["plan"] and result["candidate_clear"] and robot is not None
+        if frozen is not None:
+            result["ready"] = robot is not None
+        else:
+            result["ready"] = vision is not None
         return result
 
-    def capture(self) -> CaptureCandidate:
+    def capture(self) -> dict[str, Any]:
         with self._lock:
-            if self._candidate is not None:
-                raise ValueError("Já existe um candidato aguardando confirmação")
+            frozen = self._frozen
             session_id = self.active_session_id
             plan_z = self.active_plan_z
         if session_id is None or plan_z is None:
             raise ValueError("Ative uma sessão e um plano Z antes da captura")
+        if frozen is None:
+            return self._freeze_vision(session_id, plan_z)
+        return self._capture_robot(frozen)
+
+    def _freeze_vision(self, session_id: str, plan_z: float) -> dict[str, Any]:
         vision = self.vision_supplier()
-        robot = self.robot_supplier()
         if vision is None:
             raise ValueError("Visão indisponível")
-        if robot is None:
-            raise ValueError("Pose do robô indisponível")
         point_index, region, role, _target = self._next_point(session_id, plan_z)
-        candidate = CaptureCandidate(
+        frozen = FrozenVisionCapture(
             id=str(uuid.uuid4()),
             session_id=session_id,
             plan_z=plan_z,
@@ -249,35 +264,91 @@ class CaptureController:
             role=role,
             region=region,
             vision=vision,
-            robot=robot,
             created_at=utc_now(),
         )
         with self._lock:
-            self._candidate = candidate
+            self._frozen = frozen
         self.storage.audit(
             session_id,
-            "capture_frozen",
-            {"candidate_id": candidate.id, "plan_z": plan_z, "point": point_index},
+            "capture_vision_frozen",
+            {"candidate_id": frozen.id, "plan_z": plan_z, "point": point_index},
         )
-        return candidate
+        return {"saved": False, "step": "vision_frozen", "frozen": frozen.to_dict()}
 
-    def decide(self, confirm: bool) -> dict[str, Any]:
-        with self._lock:
-            candidate = self._candidate
-            if candidate is None:
-                raise ValueError("Não há candidato aguardando confirmação")
-            self._candidate = None
-        if not confirm:
-            self.storage.audit(
-                candidate.session_id,
-                "capture_cancelled",
-                {"candidate_id": candidate.id, "plan_z": candidate.plan_z},
-            )
-            return {"saved": False, "candidate_id": candidate.id}
+    def _capture_robot(self, frozen: FrozenVisionCapture) -> dict[str, Any]:
+        robot = self.robot_supplier()
+        if robot is None:
+            raise ValueError("Pose do robô indisponível")
+        candidate = CaptureCandidate(
+            id=frozen.id,
+            session_id=frozen.session_id,
+            plan_z=frozen.plan_z,
+            point_index=frozen.point_index,
+            role=frozen.role,
+            region=frozen.region,
+            vision=frozen.vision,
+            robot=robot,
+            created_at=utc_now(),
+        )
         saved = self.storage.save_candidate(candidate)
         evaluation = self.evaluate(candidate.session_id, candidate.plan_z, persist_results=True)
         self._maybe_expand(candidate.session_id, candidate.plan_z, evaluation)
-        return {"saved": True, "pair": saved, "evaluation": evaluation}
+        feedback = self._feedback_from_evaluation(evaluation)
+        with self._lock:
+            self._frozen = None
+            self._last_feedback = feedback
+        return {
+            "saved": True,
+            "step": "registered",
+            "pair": saved,
+            "evaluation": evaluation,
+            "feedback": feedback,
+        }
+
+    def decide(self, confirm: bool) -> dict[str, Any]:
+        if confirm:
+            raise ValueError("O ponto é gravado em Capturar coordenadas do robô (2/2)")
+        with self._lock:
+            frozen = self._frozen
+            if frozen is None:
+                raise ValueError("Não há visão congelada para descartar")
+            self._frozen = None
+        self.storage.audit(
+            frozen.session_id,
+            "capture_cancelled",
+            {"candidate_id": frozen.id, "plan_z": frozen.plan_z},
+        )
+        return {"saved": False, "candidate_id": frozen.id, "step": "vision"}
+
+    def _feedback_from_evaluation(self, evaluation: dict[str, Any]) -> dict[str, Any]:
+        calibration = self.config["calibration"]
+        xy_limit = float(calibration["xy_tolerance_mm"])
+        angle_limit = float(calibration["angular_tolerance_deg"])
+        if not evaluation.get("ready"):
+            missing = max(0, 3 - int(evaluation.get("adjustment_count") or 0))
+            noun = "ponto" if missing == 1 else "pontos"
+            return {
+                "rmse_available": False,
+                "xy_rms_mm": None,
+                "angle_rms_deg": None,
+                "message": f"RMSE indisponível — faltam {missing} {noun} de ajuste",
+                "suggestion": "Colete mais pontos",
+                "suggestion_kind": "collect",
+                "limits": {"xy_mm": xy_limit, "angle_deg": angle_limit},
+            }
+        metrics = evaluation["metrics"]
+        xy_rms = float(metrics["xy_mm"]["rms"])
+        angle_rms = float(metrics["angle_deg"]["rms"])
+        adequate = xy_rms <= xy_limit and angle_rms <= angle_limit
+        return {
+            "rmse_available": True,
+            "xy_rms_mm": xy_rms,
+            "angle_rms_deg": angle_rms,
+            "message": f"RMSE XY {xy_rms:.1f} mm · θ {angle_rms:.1f}°",
+            "suggestion": "Adequado" if adequate else "Atenção — acima do limite provisório",
+            "suggestion_kind": "ok" if adequate else "warn",
+            "limits": {"xy_mm": xy_limit, "angle_deg": angle_limit},
+        }
 
     def evaluate(
         self,
