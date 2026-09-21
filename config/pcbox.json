@@ -33,5 +33,8 @@
     "source_height": 1944,
     "destination_width": 960,
     "destination_height": 720
+  },
+  "calibration": {
+    "pick_offset_local_mm": [0.0, 55.0]
   }
 }

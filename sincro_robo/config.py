@@ -71,7 +71,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "max_points_per_plane": 9,
         "adjustment_points_per_plane": 5,
         "validation_points_per_plane": 2,
-        "pick_offset_local_mm": [57.5, 0.0],
+        "pick_offset_local_mm": [0.0, 55.0],
         "xy_tolerance_mm": 20.0,
         "angular_tolerance_deg": 5.0,
         "duplicate_distance_px": 12.0,
