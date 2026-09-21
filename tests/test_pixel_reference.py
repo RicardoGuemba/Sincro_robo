@@ -86,7 +86,7 @@ def test_mapping_is_applied_once_after_centroid() -> None:
     assert observation.reference_height == 720
     assert observation.frame_width == 2592
     assert observation.frame_height == 1944
-    assert observation.angle_deg == pytest.approx(37.0)
+    assert observation.angle_deg == pytest.approx(0.0)
     remapped = map_to_reference(observation.x, observation.y, observation.scale_x, observation.scale_y)
     assert remapped[0] != pytest.approx(observation.x)
     overlay_x, overlay_y = observation.overlay_xy()

@@ -7,11 +7,11 @@ from typing import Any
 
 import cv2
 
-from ..adapters.camera import StApiCamera, SyntheticCamera
+from ..adapters.camera import StApiCamera, SyntheticCamera, limit_frame_resolution
 from ..adapters.plc import CipPoseReader, SyntheticPoseReader
 from ..adapters.segmenter import RFDetrSegmenter, SyntheticSegmenter, annotate_frame
 from ..domain import RobotPoseSnapshot, VisionObservation, utc_now
-from ..geometry import MoldPoseEstimator, VisionStabilityTracker, build_observation
+from ..geometry import MoldPoseEstimator, VisionStabilityTracker, build_observation, parse_roi_px
 from ..overlay import overlay_stroke_scale
 from ..storage import Storage
 from .capture import CaptureController
@@ -72,7 +72,11 @@ class ApplicationRuntime:
     def _make_camera(self) -> Any:
         settings = self.config["camera"]
         if settings["provider"] == "stapi":
-            return StApiCamera(settings["device_index"], settings["fetch_timeout_ms"])
+            return StApiCamera(
+                settings["device_index"],
+                settings["fetch_timeout_ms"],
+                int(settings.get("max_dimension", 960)),
+            )
         return SyntheticCamera(settings["width"], settings["height"])
 
     def _make_segmenter(self) -> Any:
@@ -132,19 +136,27 @@ class ApplicationRuntime:
             quality["max_jitter_angle_deg"],
         )
         frame_period = 1.0 / max(0.5, float(self.config["camera"]["target_fps"]))
+        model_loaded = False
         try:
+            # Load RF-DETR before StApi acquisition. A long load with the
+            # stream already running overflows RetrieveBuffer and /api/frame
+            # stays 503 even after the model is online.
+            segmenter.load()
+            model_loaded = True
+            with self.state._lock:
+                self.state.model_status = "online"
+                self.state.model_error = None
             camera.open()
             with self.state._lock:
                 self.state.camera_status = "online"
                 self.state.camera_error = None
-            segmenter.load()
-            with self.state._lock:
-                self.state.model_status = "online"
-                self.state.model_error = None
             while not self._stop.is_set():
                 started = time.monotonic()
                 try:
-                    frame = camera.grab()
+                    frame = limit_frame_resolution(
+                        camera.grab(),
+                        int(self.config["camera"].get("max_dimension", 960)),
+                    )
                     with self.state._lock:
                         self.state.camera_status = "online"
                         self.state.camera_error = None
@@ -162,11 +174,13 @@ class ApplicationRuntime:
                     observation = None
                     display_mask = None
                     major_axis_length = None
+                    minor_axis_length = None
                     if result.masks:
                         best_index = max(range(len(result.masks)), key=lambda index: result.confidences[index])
                         display_mask = result.masks[best_index]
                         pose = estimator.estimate(display_mask)
                         major_axis_length = pose.major_axis_length
+                        minor_axis_length = pose.minor_axis_length
                         observation = build_observation(
                             pose,
                             result.confidences[best_index],
@@ -174,14 +188,21 @@ class ApplicationRuntime:
                             frame.shape,
                             quality,
                             self.config["pixel_reference"],
+                            self.config.get("vision_reference"),
+                            display_mask,
                         )
                         observation = stability.update(observation)
                     else:
                         stability.clear()
                     overlay_x = overlay_y = None
+                    vcpn_x = vcpn_y = None
                     stroke_scale = 1.0
+                    vision_ref = self.config.get("vision_reference") or {}
+                    roi_enabled = bool(vision_ref.get("roi_enabled", False))
+                    roi_px = parse_roi_px(vision_ref.get("roi_px")) if roi_enabled else None
                     if observation is not None:
                         overlay_x, overlay_y = observation.overlay_xy()
+                        vcpn_x, vcpn_y = observation.overlay_vcpn_xy()
                         stroke_scale = overlay_stroke_scale(observation.scale_x, observation.scale_y)
                     annotated = annotate_frame(
                         frame,
@@ -190,7 +211,16 @@ class ApplicationRuntime:
                         overlay_y,
                         observation.angle_deg if observation else None,
                         major_axis_length=major_axis_length,
+                        minor_axis_length=minor_axis_length,
                         stroke_scale=stroke_scale,
+                        vcpn_x=vcpn_x,
+                        vcpn_y=vcpn_y,
+                        roi_px=roi_px,
+                        roi_enabled=roi_enabled,
+                        roi_quadrant=observation.roi_quadrant if observation else None,
+                        confidence=observation.confidence if observation else None,
+                        mask_area_cm2=observation.mask_area_cm2 if observation else None,
+                        overlay="vcpn",
                     )
                     ok, encoded = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 86])
                     with self.state._lock:
@@ -213,7 +243,10 @@ class ApplicationRuntime:
                     self._stop.wait(remaining)
         except Exception as error:
             with self.state._lock:
-                if self.state.camera_status != "online":
+                if not model_loaded:
+                    self.state.model_status = "error"
+                    self.state.model_error = str(error)
+                elif self.state.camera_status != "online":
                     self.state.camera_status = "error"
                     self.state.camera_error = str(error)
                 else:

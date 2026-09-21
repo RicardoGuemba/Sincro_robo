@@ -22,16 +22,18 @@ export STAPIPY_WHEEL=/caminho/stapipy-1.2.3-cp312-cp312-linux_x86_64.whl
 ./scripts/install_pcbox.sh
 ```
 
-Copie o bundle do modelo mantendo esta estrutura:
+Copie o bundle ativo do modelo mantendo esta estrutura:
 
 ```text
-buddmeyer_rfdetr_seg__seg_small__20260915_183353/
+NEW_buddmeyer_rfdetr_seg__seg_small__20260915_183353buddmeyer_rfdetr_seg__seg_small__20260915_183353/
 ├── checkpoint_best_total.pth
 ├── config.json
 ├── hardware_env.json
 ├── manifest.json
 └── metrics.csv
 ```
+
+O diretório `buddmeyer_rfdetr_seg__seg_small__20260915_183353/` permanece no repositório só para rollback; o runtime não o carrega.
 
 ## 3. Preflight sem escrita no CLP
 
@@ -56,7 +58,7 @@ export SINCRO_PLC_IP=<IP_CONFIRMADO_DO_NX102>
 Abra `http://<IP_DO_PCBOX>:8080`. Confirme visualmente:
 
 1. cores e geometria do frame contra o StViewer;
-2. uma única máscara `sku` e threshold inicial 0,3;
+2. uma única máscara `Molde` e threshold inicial 0,3;
 3. centroide e eixo sobre a máscara na imagem original;
 4. θv horário em `[0°, 180°)` para 0°, 90° e orientações próximas de 179°;
 5. leitura de X/Y/Z/Rx/Ry/Rz contra o watch do Sysmac;

@@ -68,6 +68,87 @@ def map_to_reference(native_x: float, native_y: float, scale_x: float, scale_y: 
     return float(native_x) * float(scale_x), float(native_y) * float(scale_y)
 
 
+DEFAULT_ROI_PX = (66.0, 64.0, 841.0, 615.0)
+DEFAULT_VCP_OFFSET_MM = 55.0
+
+
+def parse_roi_px(roi_px: Iterable[float] | None = None) -> tuple[float, float, float, float]:
+    values = tuple(float(value) for value in (roi_px if roi_px is not None else DEFAULT_ROI_PX))
+    if len(values) != 4:
+        raise ValueError("roi_px deve ser xywh com 4 valores")
+    return values
+
+
+def roi_compass_anchor(roi_px: Iterable[float] | None = None) -> tuple[float, float]:
+    x, y, width, _height = parse_roi_px(roi_px)
+    return x + width / 2.0, y
+
+
+def roi_quadrant_of_point(
+    vcpn_x: float,
+    vcpn_y: float,
+    roi_px: Iterable[float] | None = None,
+) -> str | None:
+    x, y, width, height = parse_roi_px(roi_px)
+    if width <= 0.0 or height <= 0.0:
+        return None
+    px, py = float(vcpn_x), float(vcpn_y)
+    if px < x or py < y or px > x + width or py > y + height:
+        return None
+    mid_x = x + width / 2.0
+    mid_y = y + height / 2.0
+    east = px >= mid_x
+    south = py >= mid_y
+    if east and not south:
+        return "NE"
+    if not east and not south:
+        return "NO"
+    if east and south:
+        return "SE"
+    return "SO"
+
+
+def orient_north(ux: float, uy: float) -> tuple[float, float]:
+    if float(uy) > 0.0:
+        return -float(ux), -float(uy)
+    return float(ux), float(uy)
+
+
+def heading_north_deg(ux: float, uy: float) -> float:
+    nx, ny = orient_north(ux, uy)
+    if abs(nx) < 1e-15 and abs(ny) < 1e-15:
+        return 0.0
+    degrees_value = degrees(atan2(-ny, nx))
+    if degrees_value < 0.0:
+        degrees_value += 360.0
+    if abs(degrees_value - 360.0) < 1e-10:
+        return 0.0
+    return float(degrees_value)
+
+
+def vcpn_from_heading(
+    cx: float,
+    cy: float,
+    heading_deg: float,
+    offset_mm: float = DEFAULT_VCP_OFFSET_MM,
+    mm_per_px: float = 1.0,
+) -> tuple[float, float]:
+    if abs(float(offset_mm)) < 1e-12 or abs(float(mm_per_px)) < 1e-12:
+        return float(cx), float(cy)
+    length_px = float(offset_mm) / float(mm_per_px)
+    theta = radians(float(heading_deg))
+    return float(cx) + length_px * cos(theta), float(cy) - length_px * sin(theta)
+
+
+def mask_area_cm2(mask: np.ndarray, mm_per_px: float = 1.0) -> float:
+    count = float(np.asarray(mask, dtype=bool).sum())
+    return count * (float(mm_per_px) ** 2) / 100.0
+
+
+def signed_heading_delta(angle_deg: float, reference_deg: float) -> float:
+    return ((float(angle_deg) - float(reference_deg) + 180.0) % 360.0) - 180.0
+
+
 @dataclass(frozen=True)
 class EstimatedMaskPose:
     x: float
@@ -223,7 +304,7 @@ class VisionStabilityTracker:
         sigma_y = float(np.std(values[:, 1]))
         reference = float(values[-1, 2])
         deltas = np.asarray(
-            [signed_axis_delta(value, reference) for value in values[:, 2]],
+            [signed_heading_delta(value, reference) for value in values[:, 2]],
             dtype=np.float64,
         )
         sigma_angle = float(sqrt(float(np.mean(np.square(deltas)))))
@@ -248,6 +329,8 @@ def build_observation(
     frame_shape: Iterable[int],
     quality: dict[str, float],
     pixel_reference: dict[str, Any] | None = None,
+    vision_reference: dict[str, Any] | None = None,
+    mask: np.ndarray | None = None,
 ) -> VisionObservation:
     height, width = list(frame_shape)[:2]
     gates = {
@@ -262,11 +345,28 @@ def build_observation(
     scale_x, scale_y = reference_scale_factors(int(width), int(height), pixel_reference)
     mapped_x, mapped_y = map_to_reference(pose.x, pose.y, scale_x, scale_y)
     ref = pixel_reference or {}
+    vision = vision_reference or {}
+    axis_x, axis_y = float(pose.axis_vx), float(pose.axis_vy)
+    if abs(axis_x) < 1e-15 and abs(axis_y) < 1e-15:
+        axis_x = cos(radians(pose.angle_deg))
+        axis_y = sin(radians(pose.angle_deg))
+    heading = heading_north_deg(axis_x, axis_y)
+    offset_mm = float(vision.get("vcp_offset_mm", DEFAULT_VCP_OFFSET_MM))
+    mm_per_px = float(vision.get("mm_per_px", 1.026))
+    native_vcpn_x, native_vcpn_y = vcpn_from_heading(
+        pose.x, pose.y, heading, offset_mm, mm_per_px
+    )
+    vcpn_x, vcpn_y = map_to_reference(native_vcpn_x, native_vcpn_y, scale_x, scale_y)
+    roi_px = vision.get("roi_px", DEFAULT_ROI_PX)
+    quadrant = None
+    if bool(vision.get("roi_enabled", False)):
+        quadrant = roi_quadrant_of_point(native_vcpn_x, native_vcpn_y, roi_px)
+    area = mask_area_cm2(mask, mm_per_px) if mask is not None else None
     return VisionObservation(
         timestamp=utc_now(),
         x=mapped_x,
         y=mapped_y,
-        angle_deg=pose.angle_deg,
+        angle_deg=heading,
         confidence=float(confidence),
         axis_quality=pose.axis_quality,
         mask_area_ratio=pose.mask_area_ratio,
@@ -285,5 +385,11 @@ def build_observation(
         scale_y=scale_y,
         reference_width=int(ref.get("destination_width", width)),
         reference_height=int(ref.get("destination_height", height)),
+        vcpn_x=vcpn_x,
+        vcpn_y=vcpn_y,
+        native_vcpn_x=native_vcpn_x,
+        native_vcpn_y=native_vcpn_y,
+        roi_quadrant=quadrant,
+        mask_area_cm2=area,
     )
 

@@ -122,3 +122,202 @@ def test_mask_touching_border_is_rejected() -> None:
     mask = np.zeros((60, 80), dtype=np.uint8)
     mask[0:20, 20:60] = 1
     assert MoldPoseEstimator(border_margin_px=3).estimate(mask).mask_cut
+
+
+DEFAULT_ROI = [66, 64, 841, 615]
+
+
+def _color_hits(patch: np.ndarray, color, tolerance: int = 8) -> bool:
+    target = np.asarray(color, dtype=np.int16)
+    if patch.ndim == 1:
+        return bool(np.max(np.abs(patch.astype(np.int16) - target)) <= tolerance)
+    return bool(np.any(np.max(np.abs(patch.astype(np.int16) - target), axis=-1) <= tolerance))
+
+
+def _neighborhood_has_color(img: np.ndarray, y: int, x: int, color, radius: int = 3) -> bool:
+    height, width = img.shape[:2]
+    y0, y1 = max(0, y - radius), min(height, y + radius + 1)
+    x0, x1 = max(0, x - radius), min(width, x + radius + 1)
+    return _color_hits(img[y0:y1, x0:x1], color)
+
+
+@pytest.mark.parametrize(
+    ("heading", "cx", "cy", "expected"),
+    [
+        (0.0, 321.0, 166.0, (376.0, 166.0)),
+        (90.0, 233.0, 266.0, (233.0, 211.0)),
+        (91.0, 423.0, 256.0, (422.0, 201.0)),
+        (30.0, 324.0, 227.0, (372.0, 200.0)),
+        (180.0, 321.0, 166.0, (266.0, 166.0)),
+    ],
+)
+def test_vcpn_gold_cases_keep_55mm_hypotenuse(
+    heading: float, cx: float, cy: float, expected: tuple[float, float]
+) -> None:
+    from sincro_robo.geometry import vcpn_from_heading
+
+    vcpn = vcpn_from_heading(cx, cy, heading, 55.0, 1.0)
+    assert vcpn[0] == pytest.approx(expected[0], abs=1.0)
+    assert vcpn[1] == pytest.approx(expected[1], abs=1.0)
+    assert math.hypot(vcpn[0] - cx, vcpn[1] - cy) == pytest.approx(55.0, abs=1e-6)
+    if heading in {0.0, 180.0}:
+        assert vcpn[1] == pytest.approx(cy)
+    else:
+        assert vcpn[1] < cy
+
+
+def test_vector_never_points_south() -> None:
+    from sincro_robo.geometry import vcpn_from_heading
+
+    for heading in (0.0, 15.0, 45.0, 90.0, 135.0, 180.0):
+        vx, vy = vcpn_from_heading(400.0, 300.0, heading, 55.0, 1.0)
+        assert vy <= 300.0 + 1e-9
+
+
+def test_heading_keeps_180_after_west_flip() -> None:
+    from sincro_robo.geometry import heading_north_deg, orient_north
+
+    assert orient_north(-1.0, 0.0) == (-1.0, 0.0)
+    assert heading_north_deg(-1.0, 0.0) == pytest.approx(180.0)
+    assert heading_north_deg(1.0, 0.0) == pytest.approx(0.0)
+
+
+def test_opposite_axis_vectors_share_vcpn() -> None:
+    from sincro_robo.geometry import heading_north_deg, vcpn_from_heading
+
+    heading_south = heading_north_deg(0.0, 1.0)
+    heading_north = heading_north_deg(0.0, -1.0)
+    assert heading_south == pytest.approx(heading_north)
+    assert heading_south == pytest.approx(90.0)
+    south = vcpn_from_heading(233.0, 266.0, heading_south, 55.0, 1.0)
+    north = vcpn_from_heading(233.0, 266.0, heading_north, 55.0, 1.0)
+    assert south == pytest.approx(north)
+    assert south == pytest.approx((233.0, 211.0))
+
+
+def test_zero_offset_returns_centroid() -> None:
+    from sincro_robo.geometry import vcpn_from_heading
+
+    assert vcpn_from_heading(321.0, 166.0, 91.0, 0.0, 1.0) == (321.0, 166.0)
+
+
+def test_default_roi_compass_is_top_mid() -> None:
+    from sincro_robo.geometry import DEFAULT_ROI_PX, roi_compass_anchor
+
+    assert list(DEFAULT_ROI_PX) == [66.0, 64.0, 841.0, 615.0]
+    assert roi_compass_anchor(DEFAULT_ROI_PX) == pytest.approx((486.5, 64.0))
+
+
+@pytest.mark.parametrize(
+    ("x", "y", "expected"),
+    [
+        (700.0, 150.0, "NE"),
+        (200.0, 150.0, "NO"),
+        (700.0, 500.0, "SE"),
+        (200.0, 500.0, "SO"),
+        (486.5, 371.5, "SE"),
+        (50.0, 200.0, None),
+        (920.0, 200.0, None),
+        (400.0, 20.0, None),
+        (400.0, 700.0, None),
+    ],
+)
+def test_roi_quadrants_and_outside(x: float, y: float, expected: str | None) -> None:
+    from sincro_robo.geometry import roi_quadrant_of_point
+
+    assert roi_quadrant_of_point(x, y, DEFAULT_ROI) == expected
+
+
+def test_quadrant_does_not_flip_cathetus_sign() -> None:
+    from sincro_robo.geometry import roi_quadrant_of_point, vcpn_from_heading
+
+    cx, cy = 400.0, 260.0
+    vcpn = vcpn_from_heading(cx, cy, 90.0, 55.0, 1.0)
+    assert vcpn[1] < cy
+    assert roi_quadrant_of_point(*vcpn, DEFAULT_ROI) in {"NE", "NO", "SE", "SO", None}
+
+
+def test_hud_ascii_matches_supervisory_example() -> None:
+    from sincro_robo.overlay import format_vcpn_hud
+
+    lines = format_vcpn_hud(
+        423,
+        256,
+        91,
+        422,
+        201,
+        confidence=0.99,
+        roi_quadrant="NE",
+        mask_area_cm2=152.0,
+    )
+    assert lines == [
+        "Embalagem",
+        "conf:99%",
+        "C",
+        "CX:423",
+        "CY:256",
+        "Vetor",
+        "ang:91deg",
+        "VCPn",
+        "X:422",
+        "Y:201",
+        "Q:NE",
+        "A:152.0cm2",
+    ]
+
+
+def test_vcpn_overlay_draws_roi_compass_centroid_arrow_and_hud() -> None:
+    from sincro_robo.adapters.segmenter import annotate_frame
+    from sincro_robo.geometry import vcpn_from_heading
+    from sincro_robo.overlay import (
+        ROI_COMPASS_COLOR_BGR,
+        ROI_RECT_COLOR_BGR,
+        VCPN_ARROW_COLOR_BGR,
+        VCPN_CENTROID_COLOR_BGR,
+        VCPN_POINT_COLOR_BGR,
+        format_vcpn_hud,
+    )
+
+    frame = np.zeros((720, 960, 3), dtype=np.uint8)
+    mask = np.zeros((720, 960), dtype=bool)
+    mask[230:280, 400:450] = True
+    cx, cy, heading = 423.0, 256.0, 91.0
+    vx, vy = vcpn_from_heading(cx, cy, heading, 55.0, 1.0)
+    out = annotate_frame(
+        frame,
+        mask,
+        cx,
+        cy,
+        heading,
+        vcpn_x=vx,
+        vcpn_y=vy,
+        roi_px=DEFAULT_ROI,
+        roi_enabled=True,
+        roi_quadrant="NE",
+        confidence=0.99,
+        mask_area_cm2=152.0,
+        overlay="vcpn",
+    )
+    assert _neighborhood_has_color(out, 64, 66, ROI_RECT_COLOR_BGR, radius=2)
+    assert _neighborhood_has_color(out, 64, 907, ROI_RECT_COLOR_BGR, radius=2)
+    assert _neighborhood_has_color(out, 64, 487, ROI_COMPASS_COLOR_BGR, radius=4)
+    assert _neighborhood_has_color(out, int(round(cy)), int(round(cx)), VCPN_CENTROID_COLOR_BGR)
+    assert _neighborhood_has_color(out, int(round(vy)), int(round(vx)), VCPN_POINT_COLOR_BGR)
+    mid_y = int(round((cy + vy) / 2.0))
+    mid_x = int(round((cx + vx) / 2.0))
+    assert _neighborhood_has_color(out, mid_y, mid_x, VCPN_ARROW_COLOR_BGR, radius=6)
+    hud = "\n".join(format_vcpn_hud(cx, cy, heading, vx, vy, confidence=0.99, roi_quadrant="NE", mask_area_cm2=152.0))
+    assert "C" in hud and "Vetor" in hud and "VCPn" in hud and "Q:NE" in hud
+    assert out[10:140, 8:120].sum() > 0
+
+
+def test_config_default_roi_and_vcp_offset() -> None:
+    from sincro_robo.config import DEFAULT_CONFIG
+
+    vision = DEFAULT_CONFIG["vision_reference"]
+    assert vision["vcp_offset_mm"] == 55.0
+    assert vision["mm_per_px"] == 1.026
+    assert vision["roi_enabled"] is True
+    assert vision["roi_px"] == [66, 64, 841, 615]
+    assert DEFAULT_CONFIG["calibration"]["pick_offset_local_mm"] == [0.0, 55.0]
+

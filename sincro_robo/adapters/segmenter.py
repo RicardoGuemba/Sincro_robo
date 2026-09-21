@@ -61,6 +61,10 @@ class RFDetrSegmenter:
             pretrain_weights=self.checkpoint,
             resolution=self.resolution,
         )
+        dummy = Image.fromarray(
+            np.zeros((self.resolution, self.resolution, 3), dtype=np.uint8)
+        )
+        self._model.predict(dummy, threshold=self.threshold)
 
     def predict(self, frame_bgr: np.ndarray) -> SegmentationResult:
         if self._model is None:
@@ -100,9 +104,38 @@ def annotate_frame(
     *,
     major_axis_length: float | None = None,
     stroke_scale: float = 1.0,
+    minor_axis_length: float | None = None,
+    vcpn_x: float | None = None,
+    vcpn_y: float | None = None,
+    roi_px: tuple[float, float, float, float] | list[float] | None = None,
+    roi_enabled: bool = False,
+    roi_quadrant: str | None = None,
+    confidence: float | None = None,
+    mask_area_cm2: float | None = None,
+    label: str = "Embalagem",
+    overlay: str = "pick",
 ) -> np.ndarray:
-    from ..overlay import annotate_pick_overlay
+    from ..geometry import parse_roi_px
+    from ..overlay import annotate_pick_overlay, annotate_vcpn_overlay
 
+    if overlay == "vcpn" or roi_enabled or vcpn_x is not None:
+        parsed_roi = parse_roi_px(roi_px) if roi_px is not None or roi_enabled else None
+        return annotate_vcpn_overlay(
+            frame,
+            mask,
+            x,
+            y,
+            angle_deg,
+            vcpn_x=vcpn_x,
+            vcpn_y=vcpn_y,
+            roi_px=parsed_roi,
+            roi_enabled=roi_enabled,
+            roi_quadrant=roi_quadrant,
+            confidence=confidence,
+            mask_area_cm2=mask_area_cm2,
+            label=label,
+            stroke_scale=stroke_scale,
+        )
     return annotate_pick_overlay(
         frame,
         mask,
@@ -111,5 +144,6 @@ def annotate_frame(
         angle_deg,
         major_axis_length,
         stroke_scale,
+        minor_axis_length,
     )
 

@@ -70,13 +70,26 @@
           <div class="frame-corners" aria-hidden="true"></div>
           <div class="frame-meta">
             <span id="frame-resolution">— × — px</span>
-            <span>θ horário · módulo 180°</span>
+            <span>θ norte · [0°, 180°]</span>
           </div>
         </div>
         <div class="vision-readings">
-          <div class="reading major"><span>Xv</span><strong id="vision-x">—</strong><small>px</small></div>
-          <div class="reading major"><span>Yv</span><strong id="vision-y">—</strong><small>px</small></div>
-          <div class="reading angle"><span>θv</span><strong id="vision-angle">—</strong><small>graus</small></div>
+          <div class="reading-group">
+            <span>C</span>
+            <div class="reading-pair">
+              <div class="reading major"><span>CX</span><strong id="vision-cx">—</strong><small>px</small></div>
+              <div class="reading major"><span>CY</span><strong id="vision-cy">—</strong><small>px</small></div>
+            </div>
+          </div>
+          <div class="reading angle"><span>Vetor</span><strong id="vision-angle">—</strong><small>deg</small></div>
+          <div class="reading-group">
+            <span>VCPn</span>
+            <div class="reading-pair">
+              <div class="reading major"><span>X</span><strong id="vision-vcpn-x">—</strong><small>px</small></div>
+              <div class="reading major"><span>Y</span><strong id="vision-vcpn-y">—</strong><small>px</small></div>
+              <div class="reading"><span>Q</span><strong id="vision-q">—</strong></div>
+            </div>
+          </div>
           <div class="quality-block">
             <div><span>Confiança</span><strong id="vision-confidence">—</strong></div>
             <div class="quality-track"><i id="confidence-bar"></i></div>
@@ -144,9 +157,12 @@
           <div class="frozen-vision" id="frozen-vision" hidden>
             <span class="frozen-badge">Visão congelada (1/2)</span>
             <div class="frozen-readings">
-              <div><span>Xv</span><strong id="frozen-x">—</strong></div>
-              <div><span>Yv</span><strong id="frozen-y">—</strong></div>
-              <div><span>θv</span><strong id="frozen-angle">—</strong></div>
+              <div><span>CX</span><strong id="frozen-cx">—</strong></div>
+              <div><span>CY</span><strong id="frozen-cy">—</strong></div>
+              <div><span>θ</span><strong id="frozen-angle">—</strong></div>
+              <div><span>VCPn X</span><strong id="frozen-vcpn-x">—</strong></div>
+              <div><span>VCPn Y</span><strong id="frozen-vcpn-y">—</strong></div>
+              <div><span>Q</span><strong id="frozen-q">—</strong></div>
             </div>
           </div>
           <div class="capture-feedback" id="capture-feedback" hidden>
@@ -156,7 +172,7 @@
           </div>
           <button class="capture-button" id="capture-button" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
-            <span><strong id="capture-label">CAPTURAR COORDENADAS DA VISÃO (1/2)</strong><small id="capture-sublabel">Congelar Xv, Yv e θ</small></span>
+            <span><strong id="capture-label">CAPTURAR COORDENADAS DA VISÃO (1/2)</strong><small id="capture-sublabel">Congelar C, vetor e VCPn</small></span>
           </button>
           <button class="button button-secondary discard-button" id="discard-button" hidden>Descartar visão congelada</button>
           <p class="capture-help" id="capture-help">Ative uma sessão e um plano para começar.</p>
@@ -198,7 +214,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>#</th><th>Plano</th><th>Tipo</th><th>Visão (px)</th><th>θv</th><th>Robô XYZ (mm)</th><th>Rz</th><th>Residual XY</th><th>Status</th></tr></thead>
+          <thead><tr><th>#</th><th>Plano</th><th>Tipo</th><th>C (px)</th><th>θ</th><th>Robô XYZ (mm)</th><th>Rz</th><th>Residual XY</th><th>Status</th></tr></thead>
           <tbody id="pairs-table"><tr><td colspan="9" class="empty-table">Nenhum ponto gravado nesta sessão.</td></tr></tbody>
         </table>
       </div>

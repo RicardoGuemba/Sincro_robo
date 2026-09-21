@@ -14,6 +14,14 @@ def test_default_config_uses_camera_and_plc(monkeypatch) -> None:
     config = load_config()
     assert config["camera"]["provider"] == "stapi"
     assert config["model"]["provider"] == "rfdetr"
+    assert config["model"]["class_name"] == "Molde"
+    bundle = Path(config["model"]["bundle_dir"])
+    checkpoint = Path(config["model"]["checkpoint"])
+    assert bundle.name == (
+        "NEW_buddmeyer_rfdetr_seg__seg_small__20260915_183353"
+        "buddmeyer_rfdetr_seg__seg_small__20260915_183353"
+    )
+    assert checkpoint == bundle / "checkpoint_best_total.pth"
     assert config["plc"]["provider"] == "cip"
     assert config["plc"]["ip"] == "192.168.250.1"
     assert config["plc"]["pose_tag"] == "RobFrom_Coord_CurrBase_Tool"

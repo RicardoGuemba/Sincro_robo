@@ -7,7 +7,7 @@
     "provider": "synthetic",
     "target_fps": 8.0,
     "width": 960,
-    "height": 540
+    "height": 720
   },
   "model": {
     "provider": "synthetic",
@@ -19,9 +19,9 @@
   },
   "pixel_reference": {
     "source_width": 960,
-    "source_height": 540,
+    "source_height": 720,
     "destination_width": 960,
-    "destination_height": 540
+    "destination_height": 720
   }
 }
 

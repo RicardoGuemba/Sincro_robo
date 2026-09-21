@@ -90,10 +90,10 @@ Os limites de jitter ficam em configuração porque o PRD determina sua caracter
 O app lê `manifest.json` como referência operacional e carrega:
 
 ```text
-buddmeyer_rfdetr_seg__seg_small__20260915_183353/checkpoint_best_total.pth
+NEW_buddmeyer_rfdetr_seg__seg_small__20260915_183353buddmeyer_rfdetr_seg__seg_small__20260915_183353/checkpoint_best_total.pth
 ```
 
-Parâmetros fixados pelo bundle: `RFDETRSegSmall`, resolução 384, classe `sku` e threshold inicial 0,3. O checkpoint registra `rfdetr_version = 1.10.1`; a dependência do perfil PCBOX é fixada nessa mesma versão.
+Parâmetros fixados pelo bundle: `RFDETRSegSmall`, resolução 384, classe `Molde` e threshold inicial 0,3. O checkpoint registra `rfdetr_version = 1.10.1`; a dependência do perfil PCBOX é fixada nessa mesma versão. O bundle `buddmeyer_rfdetr_seg__seg_small__20260915_183353` permanece no repositório só para rollback.
 
 ## PCBOX e integração de campo
 

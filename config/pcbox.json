@@ -7,15 +7,16 @@
     "provider": "stapi",
     "device_index": 0,
     "fetch_timeout_ms": 400,
-    "target_fps": 8.0
+    "target_fps": 8.0,
+    "max_dimension": 960
   },
   "model": {
     "provider": "rfdetr",
-    "bundle_dir": "buddmeyer_rfdetr_seg__seg_small__20260915_183353",
-    "checkpoint": "buddmeyer_rfdetr_seg__seg_small__20260915_183353/checkpoint_best_total.pth",
+    "bundle_dir": "NEW_buddmeyer_rfdetr_seg__seg_small__20260915_183353buddmeyer_rfdetr_seg__seg_small__20260915_183353",
+    "checkpoint": "NEW_buddmeyer_rfdetr_seg__seg_small__20260915_183353buddmeyer_rfdetr_seg__seg_small__20260915_183353/checkpoint_best_total.pth",
     "threshold": 0.3,
     "resolution": 384,
-    "class_name": "sku",
+    "class_name": "Molde",
     "device": "auto",
     "rfdetr_version": "1.10.1"
   },
@@ -36,5 +37,9 @@
   },
   "calibration": {
     "pick_offset_local_mm": [0.0, 55.0]
+  },
+  "vision_reference": {
+    "mm_per_px": 1.026,
+    "roi_px": [66, 64, 841, 615]
   }
 }

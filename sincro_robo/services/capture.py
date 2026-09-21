@@ -30,6 +30,15 @@ POINT_REGIONS = (
 )
 
 
+def next_available_point_index(pairs: list[dict[str, Any]]) -> int:
+    used = {int(pair["point_index"]) for pair in pairs}
+    index = 1
+    while index in used:
+        index += 1
+    return index
+
+
+
 def sha256_file(path: str | Path) -> str:
     file_path = Path(path)
     if not file_path.is_file():
@@ -156,8 +165,7 @@ class CaptureController:
         return self.session_detail(session_id)
 
     def _next_point(self, session_id: str, plan_z: float) -> tuple[int, str, str, tuple[float, float]]:
-        count = len(self.storage.list_pairs(session_id, plan_z))
-        index = count + 1
+        index = next_available_point_index(self.storage.list_pairs(session_id, plan_z))
         if index > len(POINT_REGIONS):
             raise ValueError("O plano já atingiu o máximo de 9 pontos")
         region, role, target = POINT_REGIONS[index - 1]
@@ -411,7 +419,7 @@ class CaptureController:
         for plan_z in session["config"]["planes_mm"]:
             plan_pairs = [pair for pair in pairs if float(pair["plan_z"]) == float(plan_z)]
             target = int(session["config"].get("plan_targets", {}).get(str(float(plan_z)), 7))
-            next_point = len(plan_pairs) + 1
+            next_point = next_available_point_index(plan_pairs)
             suggestion = None
             if next_point <= min(target, len(POINT_REGIONS)):
                 region, role, normalized = POINT_REGIONS[next_point - 1]

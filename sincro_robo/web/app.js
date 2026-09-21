@@ -47,9 +47,16 @@ function renderVision(vision) {
     status.className = "vision-state waiting";
     status.innerHTML = "<i></i> Estabilizando";
   }
-  dom("vision-x").textContent = hasVision ? fmt(vision.x, 1) : "—";
-  dom("vision-y").textContent = hasVision ? fmt(vision.y, 1) : "—";
+  const cx = vision?.native_x ?? vision?.x;
+  const cy = vision?.native_y ?? vision?.y;
+  const vx = vision?.native_vcpn_x ?? vision?.vcpn_x;
+  const vy = vision?.native_vcpn_y ?? vision?.vcpn_y;
+  dom("vision-cx").textContent = hasVision ? fmt(cx, 1) : "—";
+  dom("vision-cy").textContent = hasVision ? fmt(cy, 1) : "—";
   dom("vision-angle").textContent = hasVision ? fmt(vision.angle_deg, 1) : "—";
+  dom("vision-vcpn-x").textContent = hasVision && Number.isFinite(Number(vx)) ? fmt(vx, 1) : "—";
+  dom("vision-vcpn-y").textContent = hasVision && Number.isFinite(Number(vy)) ? fmt(vy, 1) : "—";
+  dom("vision-q").textContent = hasVision && vision.roi_quadrant ? vision.roi_quadrant : "—";
   dom("vision-confidence").textContent = hasVision ? `${fmt(vision.confidence * 100, 1)}%` : "—";
   dom("axis-quality").textContent = hasVision ? fmt(vision.axis_quality, 2) : "—";
   dom("sigma-x").textContent = hasVision ? fmt(vision.sigma_x, 2) : "—";
@@ -84,15 +91,22 @@ function renderGates(state) {
     dom("capture-sublabel").textContent = "Congelar pose CIP e gravar o ponto";
   } else {
     dom("capture-label").textContent = "CAPTURAR COORDENADAS DA VISÃO (1/2)";
-    dom("capture-sublabel").textContent = "Congelar Xv, Yv e θ";
+    dom("capture-sublabel").textContent = "Congelar C, vetor e VCPn";
   }
   const frozenBox = dom("frozen-vision");
   if (frozen) {
     frozenBox.hidden = false;
     const vision = frozen.vision;
-    dom("frozen-x").textContent = fmt(vision.x, 1);
-    dom("frozen-y").textContent = fmt(vision.y, 1);
+    const cx = vision.native_x ?? vision.x;
+    const cy = vision.native_y ?? vision.y;
+    const vx = vision.native_vcpn_x ?? vision.vcpn_x;
+    const vy = vision.native_vcpn_y ?? vision.vcpn_y;
+    dom("frozen-cx").textContent = fmt(cx, 1);
+    dom("frozen-cy").textContent = fmt(cy, 1);
     dom("frozen-angle").textContent = `${fmt(vision.angle_deg, 1)}°`;
+    dom("frozen-vcpn-x").textContent = Number.isFinite(Number(vx)) ? fmt(vx, 1) : "—";
+    dom("frozen-vcpn-y").textContent = Number.isFinite(Number(vy)) ? fmt(vy, 1) : "—";
+    dom("frozen-q").textContent = vision.roi_quadrant || "—";
   } else {
     frozenBox.hidden = true;
   }

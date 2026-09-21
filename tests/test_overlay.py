@@ -10,6 +10,7 @@ from sincro_robo.geometry import MoldPoseEstimator
 from sincro_robo.overlay import (
     MIN_ARC_RADIUS_PX,
     PICK_ANGLE_REF_COLOR_BGR,
+    PICK_ARROW_COLOR_BGR,
     PICK_CENTROID_COLOR_BGR,
     PICK_MAJOR_AXIS_COLOR_BGR,
     PICK_MASK_COLOR_BGR,
@@ -191,6 +192,55 @@ def test_estimator_length_feeds_overlay_axis() -> None:
         pose.y,
         pose.angle_deg,
         major_axis_length=pose.major_axis_length,
+        minor_axis_length=pose.minor_axis_length,
     )
     assert pose.major_axis_length == pytest.approx(160.0, abs=2.0)
     assert _row_has_color(out, int(round(pose.y)), 30, 50, PICK_MAJOR_AXIS_COLOR_BGR)
+
+
+def test_short_edge_arrow_geometry_is_vertical_for_horizontal_object() -> None:
+    geom = compute_angle_overlay_geometry(
+        100.0, 100.0, 0.0, 40.0, 200.0, 200.0, minor_half_len=10.0
+    )
+    assert geom.base_start[0] == geom.base_end[0] == geom.magenta_end[0]
+    ys = sorted((geom.base_start[1], geom.base_end[1]))
+    assert ys[0] == pytest.approx(90, abs=1)
+    assert ys[1] == pytest.approx(110, abs=1)
+    assert geom.arrow_points
+    assert geom.arrow_points[0] == geom.base_end
+
+
+def test_swapped_sides_still_put_arrow_on_shorter_edge() -> None:
+    geom = compute_angle_overlay_geometry(
+        100.0, 100.0, 0.0, 10.0, 200.0, 200.0, minor_half_len=40.0
+    )
+    assert geom.magenta_end[1] > 100
+    assert geom.base_start[1] == geom.base_end[1] == geom.magenta_end[1]
+    assert abs(geom.magenta_end[0] - 100) <= 1
+
+
+def test_arrow_highlight_sits_on_shorter_edge() -> None:
+    mask = np.zeros((200, 200), dtype=np.uint8)
+    mask[90:110, 20:180] = 1
+    pose = MoldPoseEstimator().estimate(mask)
+    frame = np.zeros((200, 200, 3), dtype=np.uint8)
+    out = annotate_frame(
+        frame,
+        mask.astype(bool),
+        pose.x,
+        pose.y,
+        pose.angle_deg,
+        major_axis_length=pose.major_axis_length,
+        minor_axis_length=pose.minor_axis_length,
+    )
+    cx, cy = int(round(pose.x)), int(round(pose.y))
+    short_x = cx + int(round(0.5 * pose.major_axis_length))
+    assert _col_has_color(
+        out,
+        short_x,
+        cy - int(round(0.6 * pose.minor_axis_length)),
+        cy + int(round(0.6 * pose.minor_axis_length)),
+        PICK_ARROW_COLOR_BGR,
+    )
+    long_top = cy - int(round(0.5 * pose.minor_axis_length))
+    assert not _neighborhood_has_color(out, long_top, cx, PICK_ARROW_COLOR_BGR, r=4)

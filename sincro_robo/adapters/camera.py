@@ -8,10 +8,34 @@ import cv2
 import numpy as np
 
 
+DEFAULT_MAX_DIMENSION = 960
+
+
+def limit_frame_resolution(
+    frame: np.ndarray,
+    max_dimension: int = DEFAULT_MAX_DIMENSION,
+) -> np.ndarray:
+    """Downscale so the longer side is at most max_dimension, keeping aspect.
+
+    A 4:3 Sentech frame (2592×1944) becomes 960×720, the v2108 pick output.
+    Frames already within the cap are returned unchanged. Never upscales.
+    """
+    limit = int(max_dimension)
+    if limit <= 0 or frame.size == 0:
+        return frame
+    height, width = int(frame.shape[0]), int(frame.shape[1])
+    if width <= limit and height <= limit:
+        return frame
+    scale = min(limit / width, limit / height)
+    new_width = max(1, int(round(width * scale)))
+    new_height = max(1, int(round(height * scale)))
+    return cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_AREA)
+
+
 class SyntheticCamera:
     """Repeatable camera simulator used only for local development and tests."""
 
-    def __init__(self, width: int = 960, height: int = 540) -> None:
+    def __init__(self, width: int = 960, height: int = 720) -> None:
         self.width = int(width)
         self.height = int(height)
         self._opened = False
@@ -79,9 +103,15 @@ class StApiCamera:
         "BayerBG": cv2.COLOR_BayerBGGR2BGR,
     }
 
-    def __init__(self, device_index: int = 0, fetch_timeout_ms: int = 400) -> None:
+    def __init__(
+        self,
+        device_index: int = 0,
+        fetch_timeout_ms: int = 400,
+        max_dimension: int = DEFAULT_MAX_DIMENSION,
+    ) -> None:
         self.device_index = int(device_index)
         self.fetch_timeout_ms = int(fetch_timeout_ms)
+        self.max_dimension = int(max_dimension)
         self._st: Any = None
         self._device: Any = None
         self._datastream: Any = None
@@ -177,9 +207,9 @@ class StApiCamera:
             raise TimeoutError("Timeout ao aguardar frame StApi")
         if hasattr(retrieved, "__enter__"):
             with retrieved as buffer:
-                return self._read_buffer(buffer)
+                return limit_frame_resolution(self._read_buffer(buffer), self.max_dimension)
         try:
-            return self._read_buffer(retrieved)
+            return limit_frame_resolution(self._read_buffer(retrieved), self.max_dimension)
         finally:
             release = getattr(retrieved, "release", None)
             if callable(release):

@@ -33,6 +33,12 @@ class VisionObservation:
     scale_y: float = 1.0
     reference_width: int | None = None
     reference_height: int | None = None
+    vcpn_x: float | None = None
+    vcpn_y: float | None = None
+    native_vcpn_x: float | None = None
+    native_vcpn_y: float | None = None
+    roi_quadrant: str | None = None
+    mask_area_cm2: float | None = None
 
     def overlay_xy(self) -> tuple[float, float]:
         """Pixel coordinates on the original camera frame (mask centroid)."""
@@ -40,6 +46,14 @@ class VisionObservation:
             self.x if self.native_x is None else float(self.native_x),
             self.y if self.native_y is None else float(self.native_y),
         )
+
+    def overlay_vcpn_xy(self) -> tuple[float, float]:
+        """VCPn in original camera-frame pixels."""
+        if self.native_vcpn_x is None or self.native_vcpn_y is None:
+            if self.vcpn_x is None or self.vcpn_y is None:
+                return self.overlay_xy()
+            return float(self.vcpn_x), float(self.vcpn_y)
+        return float(self.native_vcpn_x), float(self.native_vcpn_y)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

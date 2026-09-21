@@ -95,9 +95,9 @@ def test_simulator_session_records_identity_pixel_reference(controller: CaptureC
     session = controller.create_session("Simulador", [0.0, 200.0, 400.0])
     reference = session["config"]["pixel_reference"]
     assert reference["source_width"] == 960
-    assert reference["source_height"] == 540
+    assert reference["source_height"] == 720
     assert reference["destination_width"] == 960
-    assert reference["destination_height"] == 540
+    assert reference["destination_height"] == 720
     assert reference["scale_x"] == pytest.approx(1.0)
     assert reference["scale_y"] == pytest.approx(1.0)
 
@@ -205,3 +205,13 @@ def test_rmse_feedback_after_three_adjustment_points(controller: CaptureControll
     assert last["feedback"]["suggestion_kind"] == "ok"
     assert last["feedback"]["xy_rms_mm"] == pytest.approx(0.0, abs=1e-6)
     assert "Adequado" in last["feedback"]["suggestion"]
+
+
+def test_next_available_point_index_fills_holes() -> None:
+    from sincro_robo.services.capture import next_available_point_index
+
+    assert next_available_point_index([]) == 1
+    assert next_available_point_index([{"point_index": 1}, {"point_index": 2}]) == 3
+    assert next_available_point_index(
+        [{"point_index": n} for n in (1, 2, 3, 4, 5, 8, 9)]
+    ) == 6
