@@ -29,7 +29,12 @@ async function api(path, options = {}) {
 function setService(id, service) {
   const node = dom(id);
   const status = service?.status || "offline";
-  node.className = `service-status ${status}`;
+  let extra = "";
+  if (id === "status-plc" && status === "online") {
+    if (service?.echo === true) extra = " echo-on";
+    else if (service?.echo === false) extra = " echo-off";
+  }
+  node.className = `service-status ${status}${extra}`;
   node.querySelector("b").textContent = status === "online" ? "online" : status === "error" ? "falha" : status;
   node.title = service?.error || "";
 }
@@ -71,7 +76,9 @@ function renderRobot(robot) {
   ["x", "y", "z", "rx", "ry", "rz"].forEach((key) => {
     dom(`robot-${key}`).textContent = robot ? fmt(robot[key], key.startsWith("r") ? 2 : 2) : "—";
   });
-  dom("pose-freshness").textContent = robot ? "LEITURA RECENTE" : "SEM LEITURA";
+  const freshness = dom("pose-freshness");
+  freshness.classList.toggle("alarm", Boolean(robot && robot.fresh === false));
+  freshness.textContent = !robot ? "SEM LEITURA" : robot.fresh === false ? "CIP SEM ECO" : "LEITURA RECENTE";
 }
 
 function renderGates(state) {
@@ -110,11 +117,14 @@ function renderGates(state) {
   } else {
     frozenBox.hidden = true;
   }
+  const echoDead = Boolean(state.robot && state.robot.fresh === false);
   dom("capture-help").textContent = !state.active_session_id
     ? "Ative uma sessão e um plano para começar."
     : state.active_plan_z === null
       ? "Selecione o plano Z em que a coleta será feita."
-      : step === "robot"
+      : echoDead && step === "robot"
+        ? "CIP SEM ECO. A captura da pose está bloqueada até o eco oscilar."
+        : step === "robot"
         ? "Visão congelada. Posicione o robô e capture a pose. A câmera pode perder o objeto."
         : "Os indicadores são só status. Capture a visão quando o molde estiver visível.";
 }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ from ..adapters.camera import StApiCamera, SyntheticCamera, limit_frame_resoluti
 from ..adapters.plc import CipPoseReader, SyntheticPoseReader
 from ..adapters.segmenter import RFDetrSegmenter, SyntheticSegmenter, annotate_frame
 from ..domain import RobotPoseSnapshot, VisionObservation, utc_now
+from ..heartbeat import CIP_ECHO_ALARM, EchoWatchdog, HeartbeatToggle
 from ..geometry import MoldPoseEstimator, VisionStabilityTracker, build_observation, parse_roi_px
 from ..overlay import overlay_stroke_scale
 from ..storage import Storage
@@ -29,6 +31,7 @@ class SharedState:
         self.camera_error: str | None = None
         self.model_error: str | None = None
         self.plc_error: str | None = None
+        self.plc_echo: bool | None = None
         self.updated_at = utc_now()
 
     def get_vision(self) -> VisionObservation | None:
@@ -47,7 +50,11 @@ class SharedState:
                 "hardware": {
                     "camera": {"status": self.camera_status, "error": self.camera_error},
                     "model": {"status": self.model_status, "error": self.model_error},
-                    "plc": {"status": self.plc_status, "error": self.plc_error},
+                    "plc": {
+                        "status": self.plc_status,
+                        "error": self.plc_error,
+                        "echo": self.plc_echo,
+                    },
                 },
                 "updated_at": self.updated_at,
             }
@@ -264,15 +271,39 @@ class ApplicationRuntime:
                     self.state.camera_status = "offline"
                     self.state.model_status = "offline"
 
+    def _publish_robot(
+        self,
+        pose: RobotPoseSnapshot | None,
+        healthy: bool,
+        alarm: str = CIP_ECHO_ALARM,
+        echo: bool | None = None,
+    ) -> None:
+        with self.state._lock:
+            if pose is not None:
+                self.state.robot = replace(pose, fresh=healthy)
+            elif self.state.robot is not None:
+                self.state.robot = replace(self.state.robot, fresh=False)
+            self.state.plc_status = "online" if healthy else "error"
+            self.state.plc_error = None if healthy else alarm
+            self.state.plc_echo = echo if healthy else None
+            self.state.updated_at = utc_now()
+
     def _plc_loop(self) -> None:
-        poll_interval = float(self.config["plc"]["poll_interval_s"])
+        settings = self.config["plc"]
+        poll_interval = float(settings["poll_interval_s"])
+        use_heartbeat = settings["provider"] == "cip"
+        watchdog = EchoWatchdog(float(settings.get("heartbeat_lost_after_s", 3.0)))
+        toggle = HeartbeatToggle(float(settings.get("heartbeat_interval_s", 1.0)))
+        write_tag = str(settings.get("heartbeat_write_tag", "VisionCtrl_Heartbeat"))
+        echo_tag = str(settings.get("heartbeat_echo_tag", "PlcCtrl_HeartBeat"))
         try:
             reader = self._make_plc()
         except Exception as error:
             with self.state._lock:
                 self.state.robot = None
                 self.state.plc_status = "error"
-                self.state.plc_error = str(error)
+                self.state.plc_error = CIP_ECHO_ALARM if use_heartbeat else str(error)
+                self.state.plc_echo = None
                 self.state.updated_at = utc_now()
             return
         connected = False
@@ -280,25 +311,36 @@ class ApplicationRuntime:
             try:
                 if not connected:
                     reader.connect()
+                    watchdog.reset_session()
+                    toggle.reset()
                     connected = True
+                now = time.monotonic()
+                if use_heartbeat:
+                    bit = toggle.next_value(now)
+                    if bit is not None:
+                        reader.write_bool(write_tag, bit)
+                    watchdog.observe_echo(reader.read_bool(echo_tag), now)
                 pose = reader.read_pose()
-                with self.state._lock:
-                    self.state.robot = pose
-                    self.state.plc_status = "online"
-                    self.state.plc_error = None
-                    self.state.updated_at = utc_now()
+                healthy = True if not use_heartbeat else watchdog.healthy(now)
+                self._publish_robot(
+                    pose,
+                    healthy,
+                    echo=watchdog.echo if use_heartbeat and healthy else None,
+                )
                 self._stop.wait(poll_interval)
             except Exception as error:
                 connected = False
+                if use_heartbeat:
+                    watchdog.mark_io_error()
                 try:
                     reader.close()
                 except Exception:
                     pass
-                with self.state._lock:
-                    self.state.robot = None
-                    self.state.plc_status = "error"
-                    self.state.plc_error = str(error)
-                    self.state.updated_at = utc_now()
+                self._publish_robot(
+                    None,
+                    False,
+                    CIP_ECHO_ALARM if use_heartbeat else str(error),
+                )
                 self._stop.wait(min(3.0, max(0.5, poll_interval * 5)))
         try:
             reader.close()
@@ -306,6 +348,7 @@ class ApplicationRuntime:
             pass
         with self.state._lock:
             self.state.plc_status = "offline"
+            self.state.plc_echo = None
 
     def snapshot(self) -> dict[str, Any]:
         payload = self.state.snapshot()

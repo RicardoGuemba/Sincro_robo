@@ -6,6 +6,7 @@ from math import cos, degrees, radians, sin
 from typing import Any, Callable
 
 from ..domain import RobotPoseSnapshot, VisionObservation, utc_now
+from ..heartbeat import echo_as_bool
 
 
 class SyntheticPoseReader:
@@ -97,6 +98,18 @@ class CipPoseReader:
         # Some aphyt/Sysmac combinations expose array members individually.
         values = [self._plc.read_variable(f"{self.tag}[{index}]") for index in range(6)]
         return [float(item) for item in values]
+
+    def write_bool(self, tag: str, value: bool) -> None:
+        self._assert_owner()
+        if self._plc is None:
+            raise RuntimeError("Sessão CIP não conectada")
+        self._plc.write_variable(tag, bool(value))
+
+    def read_bool(self, tag: str) -> bool:
+        self._assert_owner()
+        if self._plc is None:
+            raise RuntimeError("Sessão CIP não conectada")
+        return echo_as_bool(self._plc.read_variable(tag))
 
     def read_pose(self) -> RobotPoseSnapshot:
         self._assert_owner()

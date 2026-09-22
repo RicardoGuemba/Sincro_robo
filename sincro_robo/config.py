@@ -47,6 +47,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "poll_interval_s": 0.2,
         "freshness_timeout_s": 1.5,
         "pose_tag": "RobFrom_Coord_CurrBase_Tool",
+        "heartbeat_write_tag": "VisionCtrl_Heartbeat",
+        "heartbeat_echo_tag": "PlcCtrl_HeartBeat",
+        "heartbeat_interval_s": 1.0,
+        "heartbeat_lost_after_s": 3.0,
         "angle_unit": "degrees",
     },
     "vision_quality": {

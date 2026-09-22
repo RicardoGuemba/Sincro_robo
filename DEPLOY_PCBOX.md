@@ -70,7 +70,7 @@ Abra `http://<IP_DO_PCBOX>:8080`. Confirme visualmente:
 
 - Não copiar IP do CLP de outro projeto.
 - Não criar tags adicionais.
-- Não escrever em `RobFrom_Coord_CurrBase_Tool`.
+- Não escrever em `RobFrom_Coord_CurrBase_Tool`. A única escrita CIP é `VisionCtrl_Heartbeat`; o eco é `PlcCtrl_HeartBeat`. Realtec Vision deve estar parado.
 - Não rotular variação de pose como permissivo de segurança ou `robot_stopped`.
 - Não reduzir automaticamente as tolerâncias de 20 mm e 5°.
 

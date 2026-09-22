@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from sincro_robo.api import create_app
@@ -25,6 +26,10 @@ def test_default_config_uses_camera_and_plc(monkeypatch) -> None:
     assert config["plc"]["provider"] == "cip"
     assert config["plc"]["ip"] == "192.168.250.1"
     assert config["plc"]["pose_tag"] == "RobFrom_Coord_CurrBase_Tool"
+    assert config["plc"]["heartbeat_write_tag"] == "VisionCtrl_Heartbeat"
+    assert config["plc"]["heartbeat_echo_tag"] == "PlcCtrl_HeartBeat"
+    assert config["plc"]["heartbeat_interval_s"] == pytest.approx(1.0)
+    assert config["plc"]["heartbeat_lost_after_s"] == pytest.approx(3.0)
     assert config["pixel_reference"]["source_width"] == 2592
     assert config["pixel_reference"]["destination_width"] == 960
 

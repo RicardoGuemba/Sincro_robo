@@ -165,6 +165,7 @@ def test_operator_can_capture_with_all_quality_gates_red(controller: CaptureCont
     controller.activate_plan(session["id"], 0.0)
     readiness = controller.capture_readiness()
     assert readiness["ready"]
+    assert readiness["step"] == "vision"
     assert not readiness["single_instance"]
     assert not readiness["stable"]
     assert not readiness["pose"]
@@ -172,6 +173,29 @@ def test_operator_can_capture_with_all_quality_gates_red(controller: CaptureCont
     assert not readiness["plan_z"]
     frozen = controller.capture()
     assert frozen["frozen"]["session_id"] == session["id"]
+    robot_ready = controller.capture_readiness()
+    assert robot_ready["step"] == "robot"
+    assert not robot_ready["ready"]
+    assert not robot_ready["pose"]
+    with pytest.raises(ValueError, match="CIP SEM ECO"):
+        controller.capture()
+    assert controller.frozen_vision is not None
+
+
+def test_robot_capture_allowed_when_quality_gates_red_but_echo_healthy(controller: CaptureController) -> None:
+    vision = valid_vision(850.0, 480.0)
+    object.__setattr__(vision, "stable", False)
+    object.__setattr__(vision, "gates", {
+        "single_instance": False,
+        "confidence": False,
+        "mask_not_cut": False,
+        "axis_quality": False,
+        "mask_area": False,
+    })
+    controller.vision_supplier = lambda: vision
+    session = controller.create_session("Eco saudável", [0.0])
+    controller.activate_plan(session["id"], 0.0)
+    controller.capture()
     saved = controller.capture()
     assert saved["saved"]
 

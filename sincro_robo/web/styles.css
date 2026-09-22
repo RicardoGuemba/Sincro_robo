@@ -37,10 +37,12 @@ button { color: inherit; }
 .topbar-center { font: 600 14px ui-monospace, SFMono-Regular, Menlo, monospace; color: #adc0ca; letter-spacing: .08em; }
 .status-strip { justify-self: end; display: flex; gap: 8px; }
 .service-status { display: grid; grid-template-columns: 7px auto; column-gap: 8px; align-items: center; min-width: 102px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 8px; background: #0d1821; }
-.service-status i { grid-row: 1 / span 2; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 9px currentColor; }
+.service-status i { grid-row: 1 / span 2; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 9px currentColor; transition: opacity .12s ease, box-shadow .12s ease; }
 .service-status span { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
 .service-status b { font-size: 11px; font-weight: 650; text-transform: uppercase; }
 .service-status.online i { background: var(--teal); }
+.service-status.online.echo-on i { box-shadow: 0 0 12px var(--teal); opacity: 1; }
+.service-status.online.echo-off i { box-shadow: none; opacity: 0.18; }
 .service-status.error i { background: var(--red); }
 .service-status.offline i { background: var(--faint); }
 
@@ -131,6 +133,7 @@ select:focus, input:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgb
 .right-stack { display: grid; grid-template-rows: auto 1fr; gap: 16px; }
 .robot-panel, .capture-panel { padding: 17px; }
 .freshness { font-size: 10px; color: var(--muted); font-family: ui-monospace, monospace; }
+.freshness.alarm { color: var(--red); }
 .pose-grid { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line-soft); border-radius: 8px; overflow: hidden; }
 .pose-grid > div { padding: 13px 11px; background: #0b1620; border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
 .pose-grid > div:nth-child(3n) { border-right: 0; }

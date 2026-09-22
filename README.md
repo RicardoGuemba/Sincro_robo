@@ -2,7 +2,7 @@
 
 Aplicação web local para calibração manual do relacionamento entre a câmera Omron Sentech, a segmentação RF-DETR e a pose de um robô lida no Omron NX102 via CIP.
 
-A implementação segue o **PRD + SDD v0.4** e o `Backup/PLAYBOOK_STAPI_CIP.md`. Ela não comanda movimentos, não executa handshake, não verifica permissivos de segurança e não escreve no CLP.
+A implementação segue o **PRD + SDD v0.4** e o `Backup/PLAYBOOK_STAPI_CIP.md`. Ela não comanda movimentos, não executa handshake e não verifica permissivos de segurança. A única escrita CIP é o toggle de `VisionCtrl_Heartbeat`; a pose continua só leitura.
 
 ## O que está implementado
 
@@ -12,7 +12,7 @@ A implementação segue o **PRD + SDD v0.4** e o `Backup/PLAYBOOK_STAPI_CIP.md`.
 - centroide por máscara e eixo principal por PCA;
 - ângulo horário em coordenadas de imagem, normalizado em `[0°, 180°)`;
 - indicador de qualidade do eixo, máscara cortada, confiança, área e jitter;
-- leitura CIP read-only de `RobFrom_Coord_CurrBase_Tool[0..5]`;
+- leitura CIP de `RobFrom_Coord_CurrBase_Tool[0..5]` e watchdog `VisionCtrl_Heartbeat` → `PlcCtrl_HeartBeat`;
 - tela em tempo real para X/Y/Z/Rx/Ry/Rz;
 - sessões com planos Z configuráveis e defaults 0/200/400 mm;
 - 5 pontos de ajuste + 2 de validação por plano;
@@ -34,7 +34,7 @@ CameraService (thread proprietária)
           ↓
     MoldPoseEstimator + VisionStabilityTracker
           ↓
-       SharedState ← PLCService (thread CIP proprietária, read-only)
+       SharedState ← PLCService (thread CIP proprietária: pose + heartbeat)
           ↓
     CaptureController ── confirmação humana
           ↓

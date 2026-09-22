@@ -14,6 +14,7 @@ from .. import __version__
 from ..calibration import evaluate_plan, fit_plan_calibration
 from ..domain import CaptureCandidate, FrozenVisionCapture, RobotPoseSnapshot, VisionObservation, utc_now
 from ..geometry import configured_pixel_scales, signed_axis_delta
+from ..heartbeat import CIP_ECHO_ALARM
 from ..storage import Storage
 
 
@@ -243,7 +244,7 @@ class CaptureController:
             tolerance = float(self.config["calibration"]["plan_z_tolerance_mm"])
             result["plan_z"] = abs(robot.z - plan_z) <= tolerance
         if frozen is not None:
-            result["ready"] = robot is not None
+            result["ready"] = bool(robot and robot.fresh)
         else:
             result["ready"] = vision is not None
         return result
@@ -287,6 +288,8 @@ class CaptureController:
         robot = self.robot_supplier()
         if robot is None:
             raise ValueError("Pose do robô indisponível")
+        if not robot.fresh:
+            raise ValueError(CIP_ECHO_ALARM)
         candidate = CaptureCandidate(
             id=frozen.id,
             session_id=frozen.session_id,
