@@ -12,14 +12,14 @@ Este roteiro deve ser executado somente depois de publicar uma versão identific
 - `RobFrom_Coord_CurrBase_Tool` publicado via EtherNet/IP e com tipo/unidades conferidos no Sysmac.
 - Supervisório, StViewer e qualquer outro cliente StApi parados antes de abrir a câmera.
 
-## 2. Instalação a partir do GitHub
+## 2. Atualização no repositório já usado no PCBOX
 
-Clone em um diretório novo. Não substitua `/opt/sincro_robo`: essa pasta é a coleta que já roda na célula.
+O endereço continua `https://github.com/RicardoGuemba/Sincro_robo.git`, no diretório `/opt/sincro_robo`.
 
 ```bash
+cd /opt/sincro_robo
 git lfs install
-git clone https://github.com/RicardoGuemba/Sincro_Calibra_robo.git /opt/sincro_calibra_robo
-cd /opt/sincro_calibra_robo
+git pull origin main
 git lfs pull
 export STAPIPY_WHEEL=/caminho/stapipy-1.2.3-cp312-cp312-linux_x86_64.whl
 ./scripts/install_pcbox.sh
