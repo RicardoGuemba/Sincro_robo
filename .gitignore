@@ -7,5 +7,7 @@ data/*.sqlite3
 data/exports/*
 !data/exports/.gitkeep
 *.log
+tmp/
+output/
 buddmeyer_rfdetr_seg__seg_small__20260915_183353.zip
 

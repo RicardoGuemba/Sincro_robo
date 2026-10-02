@@ -17,8 +17,8 @@ def _pair(index: int, x: float, y: float, role: str = "adjustment") -> dict:
     visual_angle = (index * 23.0) % 180.0
     rz = (visual_angle + 14.0) % 180.0
     angle = math.radians(rz)
-    robot_x = center_x + math.cos(angle) * 57.5
-    robot_y = center_y + math.sin(angle) * 57.5
+    robot_x = center_x + math.cos(angle) * 55.0
+    robot_y = center_y + math.sin(angle) * 55.0
     return {
         "id": f"p{index}",
         "role": role,
@@ -28,8 +28,8 @@ def _pair(index: int, x: float, y: float, role: str = "adjustment") -> dict:
 
 
 def test_pick_offset_rotates_with_robot_rz() -> None:
-    assert robot_geometric_center(157.5, 200.0, 0.0) == pytest.approx((100.0, 200.0))
-    assert robot_geometric_center(100.0, 257.5, 90.0) == pytest.approx((100.0, 200.0))
+    assert robot_geometric_center(155.0, 200.0, 0.0) == pytest.approx((100.0, 200.0))
+    assert robot_geometric_center(100.0, 255.0, 90.0) == pytest.approx((100.0, 200.0))
 
 
 def test_affine_fit_and_validation_metrics() -> None:
@@ -58,4 +58,3 @@ def test_degenerate_points_are_refused() -> None:
     pairs = [_pair(index, float(index), float(index)) for index in range(3)]
     with pytest.raises(ValueError, match="degenerados"):
         fit_plan_calibration(0.0, pairs)
-

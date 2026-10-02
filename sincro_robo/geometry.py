@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, replace
-from math import atan2, degrees, sqrt
-from typing import Iterable
+from math import atan2, cos, degrees, hypot, isfinite, radians, sin, sqrt
+from typing import Any, Iterable, Sequence
 
 import numpy as np
 
 from .domain import VisionObservation, utc_now
+
+_HORIZONTAL_EPS = 1e-12
 
 
 def normalize_axis_angle(angle_deg: float) -> float:
@@ -21,9 +23,96 @@ def signed_axis_delta(angle_deg: float, reference_deg: float) -> float:
     return ((float(angle_deg) - float(reference_deg) + 90.0) % 180.0) - 90.0
 
 
+def directed_heading_delta(angle_deg: float, reference_deg: float) -> float:
+    """Signed delta for a north-directed heading in [0, 180]. East and west differ."""
+    return float(angle_deg) - float(reference_deg)
+
+
 def axis_angle_from_vector(vx: float, vy: float) -> float:
     # Image coordinates grow downwards, so atan2(vy, vx) is clockwise-positive.
     return normalize_axis_angle(degrees(atan2(float(vy), float(vx))))
+
+
+def orient_north(ux: float, uy: float) -> tuple[float, float]:
+    """Return a unit vector in the northern image half-plane (uy <= 0)."""
+    vx, vy = float(ux), float(uy)
+    norm = hypot(vx, vy)
+    if norm <= _HORIZONTAL_EPS:
+        return 0.0, -1.0
+    vx /= norm
+    vy /= norm
+    if vy > 0.0:
+        vx, vy = -vx, -vy
+    return vx, vy
+
+
+def heading_north_deg(ux: float, uy: float) -> float:
+    """Heading in [0, 180]: 0° east, 90° north, 180° west."""
+    vx, vy = orient_north(ux, uy)
+    angle = degrees(atan2(-vy, vx))
+    if angle < 0.0 and angle > -1e-10:
+        return 0.0
+    if angle < 0.0:
+        angle += 360.0
+    if angle > 180.0 and angle < 180.0 + 1e-10:
+        return 180.0
+    return min(180.0, max(0.0, angle))
+
+
+def vcpn_from_heading(
+    cx: float, cy: float, heading_deg: float, s_px: float
+) -> tuple[float, float]:
+    """VCPn from the right-triangle legs of a  hypotenuse along the north heading."""
+    theta = radians(float(heading_deg))
+    offset = float(s_px)
+    return float(cx) + offset * cos(theta), float(cy) - offset * sin(theta)
+
+
+def roi_quadrant_of_point(
+    vcpn_x: float,
+    vcpn_y: float,
+    roi_px: Sequence[float] | None,
+) -> str | None:
+    """Classify a VCPn point in the configured image ROI, without moving it.
+
+    The ROI uses image-space ``xywh`` coordinates: X grows east/right and Y grows
+    south/down. Its border is considered part of the rectangle. A point outside
+    the rectangle has no quadrant rather than being clamped to one.
+    """
+    if roi_px is None:
+        return None
+    try:
+        roi_values = tuple(roi_px)
+    except TypeError:
+        return None
+    if len(roi_values) != 4:
+        return None
+    try:
+        x, y, width, height = (float(value) for value in roi_values)
+        point_x = float(vcpn_x)
+        point_y = float(vcpn_y)
+    except (TypeError, ValueError):
+        return None
+    if not all(isfinite(value) for value in (x, y, width, height, point_x, point_y)):
+        return None
+    if width <= 0.0 or height <= 0.0:
+        return None
+    if not (x <= point_x <= x + width and y <= point_y <= y + height):
+        return None
+
+    midpoint_x = x + width / 2.0
+    midpoint_y = y + height / 2.0
+    if point_x >= midpoint_x:
+        return "NE" if point_y < midpoint_y else "SE"
+    return "NO" if point_y < midpoint_y else "SO"
+
+
+def resolve_vcp_scale_px(vcp_offset_mm: float, mm_per_px: float) -> float | None:
+    offset = float(vcp_offset_mm)
+    scale = float(mm_per_px)
+    if not isfinite(offset) or not isfinite(scale) or scale <= 0.0 or not isfinite(offset / scale):
+        return None
+    return offset / scale
 
 
 @dataclass(frozen=True)
@@ -60,6 +149,7 @@ class MoldPoseEstimator:
         major_value = float(eigenvalues[order[-1]])
         minor_value = max(float(eigenvalues[order[-2]]), 1e-12)
         axis_quality = major_value / minor_value
+        axis_vx, axis_vy = orient_north(float(major[0]), float(major[1]))
 
         margin = self.border_margin_px
         h, w = binary.shape
@@ -72,9 +162,9 @@ class MoldPoseEstimator:
         return EstimatedMaskPose(
             x=x,
             y=y,
-            angle_deg=axis_angle_from_vector(float(major[0]), float(major[1])),
-            axis_vx=float(major[0]),
-            axis_vy=float(major[1]),
+            angle_deg=heading_north_deg(axis_vx, axis_vy),
+            axis_vx=axis_vx,
+            axis_vy=axis_vy,
             axis_quality=axis_quality,
             mask_area_ratio=float(binary.mean()),
             mask_cut=mask_cut,
@@ -117,7 +207,7 @@ class VisionStabilityTracker:
         sigma_y = float(np.std(values[:, 1]))
         reference = float(values[-1, 2])
         deltas = np.asarray(
-            [signed_axis_delta(value, reference) for value in values[:, 2]],
+            [directed_heading_delta(value, reference) for value in values[:, 2]],
             dtype=np.float64,
         )
         sigma_angle = float(sqrt(float(np.mean(np.square(deltas)))))
@@ -141,8 +231,23 @@ def build_observation(
     instance_count: int,
     frame_shape: Iterable[int],
     quality: dict[str, float],
+    vision_reference: dict[str, Any] | None = None,
 ) -> VisionObservation:
     height, width = list(frame_shape)[:2]
+    reference = vision_reference or {}
+    vcp_offset_mm = float(reference.get("vcp_offset_mm", 55.0))
+    mm_per_px = float(reference.get("mm_per_px", 1.0))
+    s_px = resolve_vcp_scale_px(vcp_offset_mm, mm_per_px)
+    scale_ok = s_px is not None
+    if scale_ok:
+        vcpn_x, vcpn_y = vcpn_from_heading(pose.x, pose.y, pose.angle_deg, float(s_px))
+    else:
+        vcpn_x, vcpn_y = pose.x, pose.y
+    roi_quadrant = (
+        roi_quadrant_of_point(vcpn_x, vcpn_y, reference.get("roi_px"))
+        if bool(reference.get("roi_enabled", False))
+        else None
+    )
     gates = {
         "single_instance": instance_count == 1,
         "confidence": confidence >= quality["min_confidence"],
@@ -151,6 +256,7 @@ def build_observation(
         "mask_area": quality["min_mask_area_ratio"]
         <= pose.mask_area_ratio
         <= quality["max_mask_area_ratio"],
+        "vcp_scale": scale_ok,
     }
     return VisionObservation(
         timestamp=utc_now(),
@@ -169,5 +275,11 @@ def build_observation(
         frame_width=int(width),
         frame_height=int(height),
         gates=gates,
+        vcpn_x=vcpn_x,
+        vcpn_y=vcpn_y,
+        axis_ux=pose.axis_vx,
+        axis_uy=pose.axis_vy,
+        vcp_offset_mm=vcp_offset_mm,
+        mm_per_px=mm_per_px,
+        roi_quadrant=roi_quadrant,
     )
-

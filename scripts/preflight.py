@@ -20,6 +20,13 @@ if str(PROJECT_ROOT) not in sys.path:
 from sincro_robo.config import load_config
 
 
+def _is_lfs_pointer(path: Path) -> bool:
+    if not path.is_file() or path.stat().st_size > 1024:
+        return False
+    head = path.read_text(encoding="utf-8", errors="ignore")[:80]
+    return head.startswith("version https://git-lfs.github.com/spec/v1")
+
+
 def file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -60,10 +67,12 @@ def main() -> int:
         }
 
     checkpoint = Path(config["model"]["checkpoint"])
+    pointer = _is_lfs_pointer(checkpoint)
     results["checkpoint"] = {
         "value": str(checkpoint),
-        "ok": checkpoint.is_file(),
-        "sha256": file_sha256(checkpoint) if checkpoint.is_file() else None,
+        "ok": checkpoint.is_file() and not pointer and checkpoint.stat().st_size > 1_000_000,
+        "sha256": file_sha256(checkpoint) if checkpoint.is_file() and not pointer else None,
+        "lfs_pointer": pointer,
     }
     plc_ip = os.environ.get("SINCRO_PLC_IP") or config["plc"].get("ip")
     results["plc_ip"] = {"value": plc_ip or "não definido", "ok": bool(plc_ip)}

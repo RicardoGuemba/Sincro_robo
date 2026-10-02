@@ -18,7 +18,7 @@ def valid_vision(x: float = 480.0, y: float = 270.0) -> VisionObservation:
         instance_count=1, stable=True, sigma_x=0.2, sigma_y=0.2,
         sigma_angle_deg=0.1, frame_width=960, frame_height=540,
         gates={"single_instance": True, "confidence": True, "mask_not_cut": True,
-               "axis_quality": True, "mask_area": True},
+               "axis_quality": True, "mask_area": True, "vcp_scale": True},
     )
 
 

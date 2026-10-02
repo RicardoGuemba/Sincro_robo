@@ -13,6 +13,7 @@ from ..adapters.segmenter import RFDetrSegmenter, SyntheticSegmenter, annotate_f
 from ..domain import RobotPoseSnapshot, VisionObservation, utc_now
 from ..geometry import MoldPoseEstimator, VisionStabilityTracker, build_observation
 from ..storage import Storage
+from .campaign import CampaignController
 from .capture import CaptureController
 
 
@@ -65,6 +66,7 @@ class ApplicationRuntime:
             self.state.get_robot,
             project_root,
         )
+        self.campaign = CampaignController(self.storage, config, self.controller, project_root)
         self._stop = threading.Event()
         self._threads: list[threading.Thread] = []
 
@@ -100,6 +102,7 @@ class ApplicationRuntime:
             self.state.get_vision,
             lambda: self.controller.active_plan_z,
             offset,
+            override_supplier=self.campaign.pose_override,
         )
 
     def start(self) -> None:
@@ -123,6 +126,7 @@ class ApplicationRuntime:
         camera = self._make_camera()
         segmenter = self._make_segmenter()
         quality = self.config["vision_quality"]
+        vision_reference = self.config.get("vision_reference", {})
         estimator = MoldPoseEstimator(quality["border_margin_px"])
         stability = VisionStabilityTracker(
             quality["stability_samples"],
@@ -143,7 +147,15 @@ class ApplicationRuntime:
             while not self._stop.is_set():
                 started = time.monotonic()
                 try:
+                    if isinstance(camera, SyntheticCamera):
+                        scene = self.campaign.camera_scene()
+                        camera.scene = "mold" if scene == "mold" else "board"
+                        camera.pose_hold = 0 if scene == "focus" else None
                     frame = camera.grab()
+                    try:
+                        self.campaign.observe_frame(frame)
+                    except Exception:
+                        pass
                     with self.state._lock:
                         self.state.camera_status = "online"
                         self.state.camera_error = None
@@ -170,10 +182,16 @@ class ApplicationRuntime:
                             len(result.masks),
                             frame.shape,
                             quality,
+                            vision_reference,
                         )
                         observation = stability.update(observation)
                     else:
                         stability.clear()
+                    mask_area_cm2 = None
+                    if observation is not None and display_mask is not None and observation.gates.get("vcp_scale"):
+                        mask_area_cm2 = (
+                            float(display_mask.sum()) * observation.mm_per_px * observation.mm_per_px / 100.0
+                        )
                     annotated = annotate_frame(
                         frame,
                         display_mask,
@@ -181,11 +199,25 @@ class ApplicationRuntime:
                         observation.y if observation else None,
                         observation.angle_deg if observation else None,
                         observation.stable if observation else False,
+                        observation.vcpn_x if observation else None,
+                        observation.vcpn_y if observation else None,
+                        vision_reference.get("roi_px"),
+                        bool(vision_reference.get("roi_enabled", False)),
+                        "Embalagem",
+                        observation.confidence if observation else None,
+                        mask_area_cm2,
+                        observation.roi_quadrant if observation else None,
                     )
-                    ok, encoded = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 86])
+                    try:
+                        campaign_jpeg = self.campaign.encode_preview(frame)
+                    except Exception:
+                        campaign_jpeg = None
+                    if campaign_jpeg is None:
+                        ok, encoded = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 86])
+                        campaign_jpeg = encoded.tobytes() if ok else None
                     with self.state._lock:
                         self.state.vision = observation
-                        self.state.frame_jpeg = encoded.tobytes() if ok else None
+                        self.state.frame_jpeg = campaign_jpeg
                         self.state.camera_status = "online"
                         self.state.model_status = "online"
                         self.state.camera_error = None
@@ -275,6 +307,7 @@ class ApplicationRuntime:
         payload["capture_readiness"] = self.controller.capture_readiness()
         payload["active_session_id"] = self.controller.active_session_id
         payload["active_plan_z"] = self.controller.active_plan_z
+        payload["campaign"] = self.campaign.view()
         if self.controller.active_session_id:
             payload["session"] = self.controller.session_detail(self.controller.active_session_id)
         else:

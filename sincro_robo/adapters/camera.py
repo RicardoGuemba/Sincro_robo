@@ -14,6 +14,8 @@ class SyntheticCamera:
     def __init__(self, width: int = 960, height: int = 540) -> None:
         self.width = int(width)
         self.height = int(height)
+        self.scene = "mold"
+        self.pose_hold: int | None = None
         self._opened = False
         self._started_at = 0.0
 
@@ -25,6 +27,11 @@ class SyntheticCamera:
         if not self._opened:
             raise RuntimeError("Câmera simulada não está aberta")
         elapsed = time.monotonic() - self._started_at
+        if self.scene == "board":
+            from ..optics import render_checkerboard_frame
+
+            pose_index = self.pose_hold if self.pose_hold is not None else int(elapsed // 2.0)
+            return render_checkerboard_frame(self.width, self.height, pose_index)
         positions = (
             (0.50, 0.50, 0.0),
             (0.24, 0.25, 28.0),

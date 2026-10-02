@@ -33,6 +33,18 @@
     <span class="version" id="version-label">v--</span>
   </div>
 
+  <section class="panel campaign-panel" id="campaign-panel">
+    <div class="panel-heading compact">
+      <div>
+        <span class="eyebrow">Guia OpenCV · uma etapa por vez</span>
+        <h2>Calibração completa</h2>
+      </div>
+      <button class="button button-primary" id="new-campaign" type="button">Iniciar campanha</button>
+    </div>
+    <p class="campaign-lead">O tabuleiro cobre a câmera. O molde e o RF-DETR entram só na afim. Sem campanha, a coleta atual não muda.</p>
+    <div id="campaign-body"></div>
+  </section>
+
   <main class="workspace">
     <section class="session-bar panel">
       <div class="session-identity">
@@ -70,13 +82,16 @@
           <div class="frame-corners" aria-hidden="true"></div>
           <div class="frame-meta">
             <span id="frame-resolution">— × — px</span>
-            <span>θ horário · módulo 180°</span>
+            <span>θ 0° leste · 90° norte · 180° oeste</span>
           </div>
         </div>
         <div class="vision-readings">
-          <div class="reading major"><span>Xv</span><strong id="vision-x">—</strong><small>px</small></div>
-          <div class="reading major"><span>Yv</span><strong id="vision-y">—</strong><small>px</small></div>
-          <div class="reading angle"><span>θv</span><strong id="vision-angle">—</strong><small>graus</small></div>
+          <div class="reading major"><span>C · CX</span><strong id="vision-x">—</strong><small>px</small></div>
+          <div class="reading major"><span>C · CY</span><strong id="vision-y">—</strong><small>px</small></div>
+          <div class="reading angle"><span>Vetor · θ</span><strong id="vision-angle">—</strong><small>graus</small></div>
+          <div class="reading major"><span>VCPn X</span><strong id="vision-vcpn-x">—</strong><small>px</small></div>
+          <div class="reading major"><span>VCPn Y</span><strong id="vision-vcpn-y">—</strong><small>px</small></div>
+          <div class="reading major" id="vision-roi-quadrant-card" hidden><span>Q</span><strong id="vision-roi-quadrant">—</strong><small>ROI</small></div>
           <div class="quality-block">
             <div><span>Confiança</span><strong id="vision-confidence">—</strong></div>
             <div class="quality-track"><i id="confidence-bar"></i></div>
@@ -134,6 +149,7 @@
             <span data-gate="confidence">Confiança</span>
             <span data-gate="mask_not_cut">Máscara íntegra</span>
             <span data-gate="axis_quality">Eixo confiável</span>
+            <span data-gate="vcp_scale">Escala VCPn</span>
             <span data-gate="stable">Visão estável</span>
             <span data-gate="pose">Pose recente</span>
             <span data-gate="region">Região útil</span>
@@ -190,6 +206,15 @@
     </section>
   </main>
 
+  <dialog id="campaign-dialog" class="modal">
+    <form method="dialog" id="campaign-form">
+      <div class="modal-heading"><div><span class="eyebrow">Tabuleiro medido</span><h2>Nova campanha</h2></div><button value="cancel" class="close-button" aria-label="Fechar">×</button></div>
+      <label>Nome<input id="campaign-name" maxlength="120" placeholder="Ex.: Curitiba · câmera fixa" required></label>
+      <label>Lado do quadrado, em milímetros<input id="campaign-square" type="number" min="0.1" step="0.01" value="30" required><small>Meça com paquímetro. 10×7 quadrados dão 9×6 cantos internos.</small></label>
+      <div class="modal-actions"><button value="cancel" class="button button-secondary">Cancelar</button><button type="submit" value="default" class="button button-primary">Começar pela etapa 1</button></div>
+    </form>
+  </dialog>
+
   <dialog id="session-dialog" class="modal">
     <form method="dialog" id="session-form">
       <div class="modal-heading"><div><span class="eyebrow">Configuração da coleta</span><h2>Nova sessão</h2></div><button value="cancel" class="close-button" aria-label="Fechar">×</button></div>
@@ -215,5 +240,6 @@
 
   <div class="toast-region" id="toast-region" aria-live="polite"></div>
   <script src="/assets/app.js" defer></script>
+  <script src="/assets/campaign.js" defer></script>
 </body>
 </html>

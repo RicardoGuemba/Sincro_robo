@@ -23,6 +23,37 @@ class Decision(BaseModel):
     confirm: bool
 
 
+class CampaignCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    square_size_mm: float = Field(gt=0)
+
+
+class CampaignChecks(BaseModel):
+    camera_fixed: bool = False
+    lens_focus_locked: bool = False
+    production_resolution: bool = False
+    single_stapi_client: bool = False
+
+
+class CaptureDecision(BaseModel):
+    decision: str
+    reason: str = ""
+
+
+class DirectionConfirm(BaseModel):
+    sense: str
+
+
+class PlaneSelect(BaseModel):
+    plan_z: float
+
+
+def _campaign(view: dict[str, Any] | None) -> dict[str, Any]:
+    if view is None:
+        raise HTTPException(status_code=404, detail="Nenhuma campanha ativa")
+    return view
+
+
 def create_app(config: dict[str, Any]) -> FastAPI:
     Path(config["app"]["exports_dir"]).mkdir(parents=True, exist_ok=True)
     runtime = ApplicationRuntime(config, PROJECT_ROOT)
@@ -138,6 +169,72 @@ def create_app(config: dict[str, Any]) -> FastAPI:
     @app.post("/api/candidate/decision")
     def candidate_decision(request: Decision) -> dict[str, Any]:
         return runtime.controller.decide(request.confirm)
+
+    @app.post("/api/campaigns", status_code=201)
+    def create_campaign(request: CampaignCreate) -> dict[str, Any]:
+        view = runtime.campaign.create(request.name, request.square_size_mm)
+        assert view is not None
+        return view
+
+    @app.post("/api/campaigns/active/checks")
+    def campaign_checks(request: CampaignChecks) -> dict[str, Any]:
+        return _campaign(runtime.campaign.set_checks(request.model_dump()))
+
+    @app.post("/api/campaigns/active/advance")
+    def campaign_advance() -> dict[str, Any]:
+        return _campaign(runtime.campaign.advance())
+
+    @app.post("/api/campaigns/active/restart")
+    def campaign_restart() -> dict[str, Any]:
+        return _campaign(runtime.campaign.restart())
+
+    @app.post("/api/campaigns/active/captures")
+    def campaign_capture(request: CaptureDecision) -> dict[str, Any]:
+        return _campaign(runtime.campaign.decide_capture(request.decision, request.reason))
+
+    @app.post("/api/campaigns/active/intrinsic/solve")
+    def campaign_intrinsic() -> dict[str, Any]:
+        return _campaign(runtime.campaign.solve_intrinsic())
+
+    @app.post("/api/campaigns/active/captures/{capture_id}/exclude")
+    def campaign_exclude(capture_id: str) -> dict[str, Any]:
+        return _campaign(runtime.campaign.exclude_capture(capture_id))
+
+    @app.post("/api/campaigns/active/reprojection/confirm")
+    def campaign_reprojection() -> dict[str, Any]:
+        return _campaign(runtime.campaign.confirm_reprojection())
+
+    @app.post("/api/campaigns/active/undistort/confirm")
+    def campaign_undistort() -> dict[str, Any]:
+        return _campaign(runtime.campaign.confirm_undistort())
+
+    @app.post("/api/campaigns/active/frame/{role}")
+    def campaign_frame(role: str) -> dict[str, Any]:
+        return _campaign(runtime.campaign.record_frame_point(role))
+
+    @app.post("/api/campaigns/active/extrinsic/solve")
+    def campaign_extrinsic() -> dict[str, Any]:
+        return _campaign(runtime.campaign.solve_pose())
+
+    @app.post("/api/campaigns/active/direction/touch")
+    def campaign_touch() -> dict[str, Any]:
+        return _campaign(runtime.campaign.record_direction_touch())
+
+    @app.post("/api/campaigns/active/direction/confirm")
+    def campaign_direction(request: DirectionConfirm) -> dict[str, Any]:
+        return _campaign(runtime.campaign.confirm_direction(request.sense))
+
+    @app.post("/api/campaigns/active/validation/plane")
+    def campaign_plane(request: PlaneSelect) -> dict[str, Any]:
+        return _campaign(runtime.campaign.select_validation_plane(request.plan_z))
+
+    @app.post("/api/campaigns/active/affine/open")
+    def campaign_affine() -> dict[str, Any]:
+        return _campaign(runtime.campaign.open_affine_session())
+
+    @app.post("/api/campaigns/active/ransac")
+    def campaign_ransac() -> dict[str, Any]:
+        return _campaign(runtime.campaign.apply_ransac())
 
     @app.post("/api/sessions/{session_id}/export")
     def export(session_id: str) -> dict[str, Any]:

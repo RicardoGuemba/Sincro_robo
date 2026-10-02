@@ -49,6 +49,11 @@ function renderVision(vision) {
   }
   dom("vision-x").textContent = hasVision ? fmt(vision.x, 1) : "—";
   dom("vision-y").textContent = hasVision ? fmt(vision.y, 1) : "—";
+  dom("vision-vcpn-x").textContent = hasVision ? fmt(vision.vcpn_x, 1) : "—";
+  dom("vision-vcpn-y").textContent = hasVision ? fmt(vision.vcpn_y, 1) : "—";
+  const roiQuadrant = hasVision && vision.roi_quadrant ? vision.roi_quadrant : null;
+  dom("vision-roi-quadrant-card").hidden = !roiQuadrant;
+  dom("vision-roi-quadrant").textContent = roiQuadrant || "—";
   dom("vision-angle").textContent = hasVision ? fmt(vision.angle_deg, 1) : "—";
   dom("vision-confidence").textContent = hasVision ? `${fmt(vision.confidence * 100, 1)}%` : "—";
   dom("axis-quality").textContent = hasVision ? fmt(vision.axis_quality, 2) : "—";
@@ -72,7 +77,7 @@ function renderGates(state) {
   document.querySelectorAll("#gate-list [data-gate]").forEach((node) => {
     node.classList.toggle("ok", Boolean(gates[node.dataset.gate]));
   });
-  const allOk = ["single_instance", "confidence", "mask_not_cut", "axis_quality", "stable", "pose", "region", "plan_z", "not_duplicate"].every((key) => gates[key]);
+  const allOk = ["single_instance", "confidence", "mask_not_cut", "axis_quality", "vcp_scale", "stable", "pose", "region", "plan_z", "not_duplicate"].every((key) => gates[key]);
   const ready = Boolean(gates.ready);
   dom("capture-button").disabled = !ready || app.busy;
   dom("capture-help").textContent = !state.active_session_id
@@ -167,6 +172,7 @@ function renderCandidate(candidate) {
     <div><span>Ponto / plano</span><strong>${String(candidate.point_index).padStart(2, "0")} · Z=${fmt(candidate.plan_z, 0)} mm</strong></div>
     <div><span>Região</span><strong>${candidate.region}</strong></div>
     <div><span>Visão</span><strong>Xv ${fmt(v.x, 1)} · Yv ${fmt(v.y, 1)} · θ ${fmt(v.angle_deg, 1)}°</strong></div>
+    <div><span>VCPn</span><strong>${fmt(v.vcpn_x, 1)} · ${fmt(v.vcpn_y, 1)} px${v.roi_quadrant ? ` · Q ${v.roi_quadrant}` : ""}</strong></div>
     <div><span>Robô</span><strong>X ${fmt(r.x, 1)} · Y ${fmt(r.y, 1)} · Z ${fmt(r.z, 1)} · Rz ${fmt(r.rz, 1)}°</strong></div>`;
   if (!dialog.open) dialog.showModal();
 }
@@ -186,6 +192,7 @@ async function refreshState() {
   try {
     app.state = await api("/api/state");
     render(app.state);
+    if (window.renderCampaign) window.renderCampaign(app.state.campaign);
   } catch (error) {
     setService("status-camera", { status: "error", error: error.message });
   }

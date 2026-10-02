@@ -13,7 +13,7 @@ def robot_geometric_center(
     robot_x: float,
     robot_y: float,
     robot_rz_deg: float,
-    pick_offset_local_mm: Iterable[float] = (57.5, 0.0),
+    pick_offset_local_mm: Iterable[float] = (55.0, 0.0),
 ) -> tuple[float, float]:
     dx, dy = (float(value) for value in pick_offset_local_mm)
     angle = radians(float(robot_rz_deg))
@@ -54,7 +54,7 @@ class CalibrationModel:
 def fit_plan_calibration(
     plan_z: float,
     pairs: Iterable[dict[str, Any]],
-    pick_offset_local_mm: Iterable[float] = (57.5, 0.0),
+    pick_offset_local_mm: Iterable[float] = (55.0, 0.0),
 ) -> CalibrationModel:
     adjustment = [pair for pair in pairs if pair.get("role") == "adjustment"]
     if len(adjustment) < 3:
@@ -105,7 +105,7 @@ def _stats(values: list[float], include_p95: bool = True) -> dict[str, float]:
 def evaluate_plan(
     model: CalibrationModel,
     pairs: Iterable[dict[str, Any]],
-    pick_offset_local_mm: Iterable[float] = (57.5, 0.0),
+    pick_offset_local_mm: Iterable[float] = (55.0, 0.0),
     xy_tolerance_mm: float = 20.0,
     angular_tolerance_deg: float = 5.0,
 ) -> dict[str, Any]:
@@ -156,4 +156,3 @@ def evaluate_plan(
         "limits": {"xy_mm": float(xy_tolerance_mm), "angle_deg": float(angular_tolerance_deg)},
         "pairs": evaluated,
     }
-

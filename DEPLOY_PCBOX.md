@@ -14,15 +14,18 @@ Este roteiro deve ser executado somente depois de publicar uma versão identific
 
 ## 2. Instalação a partir do GitHub
 
+Clone em um diretório novo. Não substitua `/opt/sincro_robo`: essa pasta é a coleta que já roda na célula.
+
 ```bash
-git clone <URL_DO_REPOSITORIO> /opt/sincro_robo
-cd /opt/sincro_robo
-git checkout <TAG_POC>
+git lfs install
+git clone https://github.com/RicardoGuemba/Sincro_Calibra_robo.git /opt/sincro_calibra_robo
+cd /opt/sincro_calibra_robo
+git lfs pull
 export STAPIPY_WHEEL=/caminho/stapipy-1.2.3-cp312-cp312-linux_x86_64.whl
 ./scripts/install_pcbox.sh
 ```
 
-Copie o bundle do modelo mantendo esta estrutura:
+O `git lfs pull` baixa o checkpoint de 128 MB. Sem ele, o arquivo fica como ponteiro de texto e a instalação para. O bundle esperado é:
 
 ```text
 buddmeyer_rfdetr_seg__seg_small__20260915_183353/
@@ -32,6 +35,8 @@ buddmeyer_rfdetr_seg__seg_small__20260915_183353/
 ├── manifest.json
 └── metrics.csv
 ```
+
+Esta versão usa `pick_offset_local_mm = [55.0, 0.0]`. Confirme esse vetor no ferramental antes de gravar pares do molde.
 
 ## 3. Preflight sem escrita no CLP
 
@@ -61,7 +66,7 @@ Abra `http://<IP_DO_PCBOX>:8080`. Confirme visualmente:
 4. θv horário em `[0°, 180°)` para 0°, 90° e orientações próximas de 179°;
 5. leitura de X/Y/Z/Rx/Ry/Rz contra o watch do Sysmac;
 6. tipo do array e unidades reais de posição/orientação;
-7. sentido local do offset `(+57,5 mm, 0 mm)`;
+7. sentido local do offset configurado, `[55.0, 0.0]`, contra o ferramental;
 8. câmera liberada corretamente no encerramento.
 
 ## 5. Itens que não podem ser assumidos

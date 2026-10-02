@@ -12,8 +12,8 @@ from typing import Any, Callable
 
 from .. import __version__
 from ..calibration import evaluate_plan, fit_plan_calibration
+from ..optics import undistort_pairs
 from ..domain import CaptureCandidate, RobotPoseSnapshot, VisionObservation, utc_now
-from ..geometry import signed_axis_delta
 from ..storage import Storage
 
 
@@ -101,6 +101,7 @@ class CaptureController:
             "max_points_per_plane": calibration["max_points_per_plane"],
             "model_threshold": self.config["model"]["threshold"],
             "vision_quality": self.config["vision_quality"],
+            "vision_reference": self.config.get("vision_reference", {}),
             "source_config": self.config["_config_path"],
         }
         return self.storage.create_session(
@@ -153,7 +154,7 @@ class CaptureController:
         for pair in self.storage.list_pairs(session_id, plan_z):
             vision = pair["vision"]
             distance = math.hypot(observation.x - vision["x"], observation.y - vision["y"])
-            angle = abs(signed_axis_delta(observation.angle_deg, vision["angle_deg"]))
+            angle = abs(observation.angle_deg - vision["angle_deg"])
             if (
                 distance < calibration["duplicate_distance_px"]
                 and angle < calibration["duplicate_angle_deg"]
@@ -184,6 +185,7 @@ class CaptureController:
             "mask_not_cut": bool(vision and vision.gates.get("mask_not_cut")),
             "axis_quality": bool(vision and vision.gates.get("axis_quality")),
             "mask_area": bool(vision and vision.gates.get("mask_area")),
+            "vcp_scale": bool(vision and vision.gates.get("vcp_scale")),
             "stable": bool(vision and vision.stable),
             "pose": bool(robot and robot.fresh),
             "region": False,
@@ -211,8 +213,8 @@ class CaptureController:
             result[key]
             for key in (
                 "session", "plan", "single_instance", "confidence", "mask_not_cut",
-                "axis_quality", "mask_area", "stable", "pose", "region", "plan_z",
-                "not_duplicate", "candidate_clear",
+                "axis_quality", "mask_area", "vcp_scale", "stable", "pose", "region",
+                "plan_z", "not_duplicate", "candidate_clear",
             )
         )
         return result
@@ -298,16 +300,31 @@ class CaptureController:
                 "reason": "mínimo de 3 pontos de ajuste ainda não atingido",
                 "adjustment_count": adjustment_count,
             }
+        session = self.storage.get_session(session_id)
+        profile = (session or {}).get("config", {}).get("optical_profile")
+        if profile and profile.get("stale"):
+            return {
+                "ready": False,
+                "stale": True,
+                "reason": "Perfil óptico obsoleto. A afim desta sessão não pode ser recalculada.",
+                "adjustment_count": adjustment_count,
+            }
+        model_pairs = pairs
+        if profile:
+            try:
+                model_pairs = undistort_pairs(pairs, profile)
+            except ValueError as error:
+                return {"ready": False, "reason": str(error), "adjustment_count": adjustment_count}
         calibration = self.config["calibration"]
         try:
             model = fit_plan_calibration(
-                plan_z, pairs, calibration["pick_offset_local_mm"]
+                plan_z, model_pairs, calibration["pick_offset_local_mm"]
             )
         except ValueError as error:
             return {"ready": False, "reason": str(error), "adjustment_count": adjustment_count}
         metrics = evaluate_plan(
             model,
-            pairs,
+            model_pairs,
             calibration["pick_offset_local_mm"],
             calibration["xy_tolerance_mm"],
             calibration["angular_tolerance_deg"],
@@ -320,7 +337,12 @@ class CaptureController:
                     pair_result["residual_xy_mm"],
                     pair_result["error_angle_deg"],
                 )
-        return {"ready": True, "model": model.to_dict(), "metrics": metrics}
+        model_payload = model.to_dict()
+        if profile and not profile.get("stale"):
+            model_payload["input_space"] = profile.get("input_space", "undistorted_px_K_rect")
+            model_payload["profile_id"] = profile.get("profile_id")
+            model_payload["profile_sha256"] = profile.get("profile_sha256")
+        return {"ready": True, "model": model_payload, "metrics": metrics}
 
     def _maybe_expand(self, session_id: str, plan_z: float, evaluation: dict[str, Any]) -> None:
         pairs = self.storage.list_pairs(session_id, plan_z)
@@ -384,7 +406,8 @@ class CaptureController:
         with csv_path.open("w", encoding="utf-8", newline="") as stream:
             fieldnames = [
                 "id", "plan_z", "point_index", "role", "region", "saved_at", "status",
-                "vision_x", "vision_y", "vision_angle_deg", "confidence", "axis_quality",
+                "vision_x", "vision_y", "vision_angle_deg", "vcpn_x", "vcpn_y",
+                "confidence", "axis_quality",
                 "robot_x", "robot_y", "robot_z", "robot_rx", "robot_ry", "robot_rz",
                 "residual_xy_mm", "error_angle_deg",
             ]
@@ -399,6 +422,8 @@ class CaptureController:
                         "status": pair["status"], "vision_x": pair["vision"]["x"],
                         "vision_y": pair["vision"]["y"],
                         "vision_angle_deg": pair["vision"]["angle_deg"],
+                        "vcpn_x": pair["vision"].get("vcpn_x"),
+                        "vcpn_y": pair["vision"].get("vcpn_y"),
                         "confidence": pair["vision"]["confidence"],
                         "axis_quality": pair["vision"]["axis_quality"],
                         "robot_x": pair["robot"]["x"], "robot_y": pair["robot"]["y"],

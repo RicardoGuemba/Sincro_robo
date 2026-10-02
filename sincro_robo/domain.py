@@ -27,6 +27,13 @@ class VisionObservation:
     frame_width: int
     frame_height: int
     gates: dict[str, bool] = field(default_factory=dict)
+    vcpn_x: float = 0.0
+    vcpn_y: float = 0.0
+    axis_ux: float = 0.0
+    axis_uy: float = 0.0
+    vcp_offset_mm: float = 55.0
+    mm_per_px: float = 1.0
+    roi_quadrant: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -64,4 +71,3 @@ class CaptureCandidate:
         result = asdict(self)
         result["prompt"] = "Gravar esta posição do robô?"
         return result
-

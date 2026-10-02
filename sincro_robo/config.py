@@ -46,6 +46,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "pose_tag": "RobFrom_Coord_CurrBase_Tool",
         "angle_unit": "degrees",
     },
+    "vision_reference": {
+        "vcp_offset_mm": 55.0,
+        "mm_per_px": 1.0,
+        "roi_enabled": True,
+        "roi_px": [189, 103, 277, 277],
+    },
     "vision_quality": {
         "min_confidence": 0.3,
         "min_axis_quality": 1.35,
@@ -63,7 +69,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "max_points_per_plane": 9,
         "adjustment_points_per_plane": 5,
         "validation_points_per_plane": 2,
-        "pick_offset_local_mm": [57.5, 0.0],
+        "pick_offset_local_mm": [55.0, 0.0],
         "xy_tolerance_mm": 20.0,
         "angular_tolerance_deg": 5.0,
         "duplicate_distance_px": 12.0,

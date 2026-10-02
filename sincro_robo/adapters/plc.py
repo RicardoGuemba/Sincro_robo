@@ -15,11 +15,13 @@ class SyntheticPoseReader:
         self,
         vision_supplier: Callable[[], VisionObservation | None],
         plan_supplier: Callable[[], float | None],
-        pick_offset_mm: tuple[float, float] = (57.5, 0.0),
+        pick_offset_mm: tuple[float, float] = (55.0, 0.0),
+        override_supplier: Callable[[], tuple[float, float, float] | None] | None = None,
     ) -> None:
         self.vision_supplier = vision_supplier
         self.plan_supplier = plan_supplier
         self.pick_offset_mm = pick_offset_mm
+        self.override_supplier = override_supplier
         self._opened = False
 
     def connect(self) -> None:
@@ -28,6 +30,19 @@ class SyntheticPoseReader:
     def read_pose(self) -> RobotPoseSnapshot:
         if not self._opened:
             raise RuntimeError("PLC simulado não conectado")
+        if self.override_supplier is not None:
+            override = self.override_supplier()
+            if override is not None:
+                return RobotPoseSnapshot(
+                    timestamp=utc_now(),
+                    x=float(override[0]),
+                    y=float(override[1]),
+                    z=float(override[2]),
+                    rx=180.0,
+                    ry=0.0,
+                    rz=0.0,
+                    fresh=True,
+                )
         vision = self.vision_supplier()
         if vision is None:
             return RobotPoseSnapshot(utc_now(), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, True)
